@@ -386,8 +386,12 @@ function NutritionScreen({setScreen,user}){
   const [meals,setMeals]=useState([]);
   const [loading,setLoading]=useState(true);
   const [adding,setAdding]=useState(false);
+  const [analyzing,setAnalyzing]=useState(false);
   const [mealName,setMealName]=useState('');
   const [mealCal,setMealCal]=useState('');
+  const [mealProtein,setMealProtein]=useState('');
+  const [mealCarbs,setMealCarbs]=useState('');
+  const [mealFat,setMealFat]=useState('');
   const today=new Date().toISOString().split('T')[0];
 
   useEffect(()=>{if(user)loadMeals();},[user]);
@@ -399,30 +403,70 @@ function NutritionScreen({setScreen,user}){
     setLoading(false);
   };
 
-  const addMeal=async()=>{
-    if(!mealName.trim()||!mealCal.trim())return;
-    const newMeal={name:mealName,cal:parseInt(mealCal),time:new Date().toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})};
-    const newMeals=[...meals,newMeal];
-    setMeals(newMeals);setMealName('');setMealCal('');setAdding(false);
+  const saveMeals=async(newMeals)=>{
     const{data:existing}=await sb.from('daily_logs').select('id').eq('user_id',user.id).eq('date',today).single();
-    if(existing){
-      await sb.from('daily_logs').update({meals:newMeals}).eq('id',existing.id);
-    }else{
-      await sb.from('daily_logs').insert({user_id:user.id,date:today,meals:newMeals});
-    }
-    await sb.from('profiles').update({points:sb.rpc('increment',{x:30})}).eq('id',user.id);
+    if(existing){await sb.from('daily_logs').update({meals:newMeals}).eq('id',existing.id);}
+    else{await sb.from('daily_logs').insert({user_id:user.id,date:today,meals:newMeals});}
   };
 
-  const total=meals.reduce((s,m)=>s+m.cal,0);
-  const target=2200;
-  const pct=Math.min(Math.round((total/target)*100),100);
+  const analyzePhoto=async(e)=>{
+    const file=e.target.files[0];
+    if(!file)return;
+    setAnalyzing(true);
+    const reader=new FileReader();
+    reader.onload=async(ev)=>{
+      const base64=ev.target.result.split(',')[1];
+      try{
+        const res=await fetch('https://api.anthropic.com/v1/messages',{
+          method:'POST',
+          headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({
+            model:'claude-sonnet-4-6',
+            max_tokens:500,
+            system:'You analyze food photos and estimate nutritional content. Return JSON only with these exact fields: {"name": "meal name", "calories": 450, "protein": 35, "carbs": 40, "fat": 12}. Be realistic with estimates.',
+            messages:[{role:'user',content:[
+              {type:'image',source:{type:'base64',media_type:'image/jpeg',data:base64}},
+              {type:'text',text:'What is this food and what are the estimated macros? Return JSON only.'}
+            ]}]
+          })
+        });
+        const data=await res.json();
+        const text=data.content?.[0]?.text||'{}';
+        const clean=text.replace(/```json|```/g,'').trim();
+        const parsed=JSON.parse(clean);
+        setMealName(parsed.name||'');
+        setMealCal(String(parsed.calories||''));
+        setMealProtein(String(parsed.protein||''));
+        setMealCarbs(String(parsed.carbs||''));
+        setMealFat(String(parsed.fat||''));
+        setAdding(true);
+      }catch{setMealName('');setAdding(true);}
+      setAnalyzing(false);
+    };
+    reader.readAsDataURL(file);
+  };
 
-  const inp={width:'100%',padding:'12px 14px',borderRadius:10,fontSize:14,background:C.navy,border:`1.5px solid ${C.border}`,color:C.silverBright,outline:'none',boxSizing:'border-box'};
+  const addMeal=async()=>{
+    if(!mealName.trim())return;
+    const newMeal={name:mealName,cal:parseInt(mealCal)||0,protein:parseInt(mealProtein)||0,carbs:parseInt(mealCarbs)||0,fat:parseInt(mealFat)||0,time:new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})};
+    const newMeals=[...meals,newMeal];
+    setMeals(newMeals);
+    setMealName('');setMealCal('');setMealProtein('');setMealCarbs('');setMealFat('');
+    setAdding(false);
+    await saveMeals(newMeals);
+  };
+
+  const total={cal:meals.reduce((s,m)=>s+(m.cal||0),0),protein:meals.reduce((s,m)=>s+(m.protein||0),0),carbs:meals.reduce((s,m)=>s+(m.carbs||0),0),fat:meals.reduce((s,m)=>s+(m.fat||0),0)};
+  const target=2200;
+  const pct=Math.min(Math.round((total.cal/target)*100),100);
+  const inp={width:'100%',padding:'12px 14px',borderRadius:10,fontSize:14,background:C.navy,border:`1.5px solid ${C.border}`,color:C.silverBright,outline:'none',boxSizing:'border-box',marginBottom:10};
 
   return h('div',{style:{minHeight:'100vh',background:C.navy,padding:'54px 24px 100px'}},
     h('div',{style:{fontSize:11,color:C.blue,fontWeight:700,letterSpacing:2,marginBottom:4}},'NUTRITION LOG'),
     h('div',{style:{fontSize:26,fontWeight:900,color:C.silverBright,marginBottom:20}},"Today's Fuel"),
-    h('div',{style:{background:C.navyLight,borderRadius:20,padding:20,display:'flex',alignItems:'center',gap:20,marginBottom:24}},
+
+    // Calorie ring
+    h('div',{style:{background:C.navyLight,borderRadius:20,padding:20,display:'flex',alignItems:'center',gap:20,marginBottom:16}},
       h('div',{style:{position:'relative',width:80,height:80,flexShrink:0}},
         h('svg',{width:'80',height:'80',viewBox:'0 0 80 80'},
           h('circle',{cx:'40',cy:'40',r:'34',fill:'none',stroke:C.border,strokeWidth:'8'}),
@@ -430,44 +474,71 @@ function NutritionScreen({setScreen,user}){
         ),
         h('div',{style:{position:'absolute',inset:0,display:'flex',alignItems:'center',justifyContent:'center'}},h('div',{style:{fontSize:14,fontWeight:900,color:C.white}},pct+'%'))
       ),
-      h('div',null,
-        h('div',{style:{fontSize:28,fontWeight:900,color:C.white}},total.toLocaleString()),
+      h('div',{style:{flex:1}},
+        h('div',{style:{fontSize:28,fontWeight:900,color:C.white}},total.cal.toLocaleString()),
         h('div',{style:{fontSize:13,color:C.silverDim}},'of '+target.toLocaleString()+' kcal'),
-        h('div',{style:{fontSize:11,color:total<target?C.success:C.warning,marginTop:4}},total<target?'On track today':'Over target')
+        h('div',{style:{display:'flex',gap:12,marginTop:8}},
+          h('div',{style:{fontSize:11,color:'#3B82F6'}},h('span',{style:{fontWeight:800}},total.protein+'g'),' protein'),
+          h('div',{style:{fontSize:11,color:'#F59E0B'}},h('span',{style:{fontWeight:800}},total.carbs+'g'),' carbs'),
+          h('div',{style:{fontSize:11,color:'#EF4444'}},h('span',{style:{fontWeight:800}},total.fat+'g'),' fat')
+        )
       )
     ),
-    h('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:12}},
-      h('div',{style:{fontSize:12,color:C.silverDim,fontWeight:700,letterSpacing:1.5}},'MEALS'),
-      h('button',{onClick:()=>setAdding(true),className:'btn',style:{background:C.blue,borderRadius:8,padding:'6px 14px',color:'#fff',fontSize:12,fontWeight:700}},loading?'..':'+ Add Meal')
+
+    // Add meal buttons
+    h('div',{style:{display:'flex',gap:10,marginBottom:16}},
+      h('label',{style:{flex:1,padding:'12px',background:analyzing?C.navyLight:`${C.success}20`,border:`1px solid ${C.success}40`,borderRadius:12,cursor:'pointer',textAlign:'center',color:C.success,fontSize:13,fontWeight:700,display:'flex',alignItems:'center',justifyContent:'center',gap:6}},
+        analyzing?'Analyzing...':'📸 Photo',
+        h('input',{type:'file',accept:'image/*',capture:'environment',style:{display:'none'},onChange:analyzePhoto,disabled:analyzing})
+      ),
+      h('button',{onClick:()=>setAdding(true),className:'btn',style:{flex:1,padding:'12px',background:`${C.blue}20`,border:`1px solid ${C.blue}40`,borderRadius:12,color:C.blue,fontSize:13,fontWeight:700}},'✏️ Manual')
     ),
+
+    // Add meal form
     adding&&h('div',{style:{background:C.navyLight,borderRadius:14,padding:16,border:`1px solid ${C.blue}40`,marginBottom:14}},
       h('div',{style:{fontSize:12,color:C.blue,fontWeight:700,marginBottom:10}},'LOG A MEAL'),
-      h('input',{style:{...inp,marginBottom:10},placeholder:'What did you eat?',value:mealName,onChange:e=>setMealName(e.target.value)}),
-      h('input',{style:{...inp,marginBottom:12},placeholder:'Calories (e.g. 450)',value:mealCal,onChange:e=>setMealCal(e.target.value),type:'number'}),
+      h('input',{style:inp,placeholder:'Meal name',value:mealName,onChange:e=>setMealName(e.target.value)}),
+      h('div',{style:{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:10}},
+        h('div',null,h('div',{style:{fontSize:10,color:C.silverDim,marginBottom:4,fontWeight:600}},'CALORIES'),h('input',{style:{...inp,marginBottom:0},placeholder:'e.g. 450',value:mealCal,onChange:e=>setMealCal(e.target.value),type:'number'})),
+        h('div',null,h('div',{style:{fontSize:10,color:C.blue,marginBottom:4,fontWeight:600}},'PROTEIN (g)'),h('input',{style:{...inp,marginBottom:0},placeholder:'e.g. 35',value:mealProtein,onChange:e=>setMealProtein(e.target.value),type:'number'})),
+        h('div',null,h('div',{style:{fontSize:10,color:C.warning,marginBottom:4,fontWeight:600}},'CARBS (g)'),h('input',{style:{...inp,marginBottom:0},placeholder:'e.g. 40',value:mealCarbs,onChange:e=>setMealCarbs(e.target.value),type:'number'})),
+        h('div',null,h('div',{style:{fontSize:10,color:C.danger,marginBottom:4,fontWeight:600}},'FAT (g)'),h('input',{style:{...inp,marginBottom:0},placeholder:'e.g. 12',value:mealFat,onChange:e=>setMealFat(e.target.value),type:'number'}))
+      ),
       h('div',{style:{display:'flex',gap:10}},
         h('button',{onClick:addMeal,className:'btn',style:{flex:1,padding:'12px 0',background:'linear-gradient(135deg,#1D4ED8,#3B82F6)',borderRadius:10,color:'#fff',fontSize:14,fontWeight:700}},'LOG MEAL'),
         h('button',{onClick:()=>setAdding(false),className:'btn',style:{padding:'12px 16px',background:C.border,borderRadius:10,color:C.silverDim,fontSize:14}},'Cancel')
       )
     ),
+
+    // Meals list
     loading?h('div',{style:{textAlign:'center',color:C.silverDim,padding:20}},'Loading...'):
     meals.length===0?
       h('div',{style:{background:C.navyLight,borderRadius:14,padding:24,textAlign:'center',border:`1px solid ${C.border}`}},
         h('div',{style:{fontSize:32,marginBottom:8}},'🥗'),
-        h('div',{style:{fontSize:14,color:C.silverDim}},"No meals logged yet today."),
-        h('div',{style:{fontSize:13,color:C.silverDim,marginTop:4}},'Tap + Add Meal to start tracking.')
+        h('div',{style:{fontSize:14,color:C.silverDim}},'No meals logged yet.'),
+        h('div',{style:{fontSize:13,color:C.silverDim,marginTop:4}},'Snap a photo or add manually.')
       ):
       h('div',{style:{display:'flex',flexDirection:'column',gap:10,marginBottom:20}},
-        meals.map((m,i)=>h('div',{key:i,style:{background:C.navyLight,borderRadius:14,padding:'14px 16px',border:`1px solid ${C.border}`,display:'flex',justifyContent:'space-between',alignItems:'center'}},
-          h('div',null,h('div',{style:{fontSize:14,fontWeight:700,color:C.silverBright}},m.name),h('div',{style:{fontSize:12,color:C.silverDim,marginTop:2}},m.time)),
-          h('div',{style:{fontSize:15,fontWeight:800,color:C.white}},m.cal+' kcal')
+        meals.map((m,i)=>h('div',{key:i,style:{background:C.navyLight,borderRadius:14,padding:'14px 16px',border:`1px solid ${C.border}`}},
+          h('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:6}},
+            h('div',{style:{fontSize:14,fontWeight:700,color:C.silverBright}},m.name),
+            h('div',{style:{fontSize:14,fontWeight:800,color:C.white}},m.cal+' kcal')
+          ),
+          h('div',{style:{display:'flex',gap:12}},
+            m.protein>0&&h('div',{style:{fontSize:11,color:C.blue}},m.protein+'g protein'),
+            m.carbs>0&&h('div',{style:{fontSize:11,color:C.warning}},m.carbs+'g carbs'),
+            m.fat>0&&h('div',{style:{fontSize:11,color:C.danger}},m.fat+'g fat'),
+            h('div',{style:{fontSize:11,color:C.silverDim,marginLeft:'auto'}},m.time)
+          )
         ))
       ),
+
     h('div',{style:{background:`${C.blue}10`,border:`1px solid ${C.blue}30`,borderRadius:14,padding:16,display:'flex',gap:12}},
       h(Avatar,{size:36}),
       h('div',{style:{fontSize:13,color:C.silver,lineHeight:1.6}},
-        meals.length===0?'"Log your meals. Coach Skelly needs to see what you\'re fueling your body with."':
-        total<target?`"You're at ${pct}% of your calories. Stay on track. Protein first, always."`:
-        '"You\'ve hit your calorie target. Make sure those calories are clean fuel, not junk."'
+        meals.length===0?'"Log your meals. Snap a photo and I\'ll analyze the macros automatically."':
+        total.protein<100?'"Protein is low. Aim for at least 100g of protein daily to support muscle recovery."':
+        '"Good work logging your meals. Keep protein high and carbs clean."'
       )
     ),
     h(BottomNav,{screen:S.NUTRITION,setScreen})
