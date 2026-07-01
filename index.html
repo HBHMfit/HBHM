@@ -27,7 +27,7 @@ const {createClient} = supabase;
 const sb = createClient('https://dxpurntcbiplzjhpdisp.supabase.co','sb_publishable_yuJxW-ukJ4evDAiRhDBrGQ_pJtG9X0W');
 
 const C={navy:'#0D1117',navyMid:'#141B26',navyLight:'#1C2535',border:'#2A3447',silver:'#C0C8D8',silverBright:'#E8ECF4',silverDim:'#6B7280',blue:'#3B82F6',white:'#FFFFFF',success:'#22C55E',warning:'#F59E0B',danger:'#EF4444'};
-const S={LOADING:'loading',AUTH:'auth',WELCOME:'welcome',ON1:'on1',ON2:'on2',ONBODY:'onbody',ON3:'on3',PAYMENT:'payment',DASH:'dash',WORKOUT:'workout',EXERCISE:'exercise',COACH:'coach',NUTRITION:'nutrition',LEADERBOARD:'leaderboard'};
+const S={LOADING:'loading',AUTH:'auth',WELCOME:'welcome',ON1:'on1',ON2:'on2',ONBODY:'onbody',ON3:'on3',PAYMENT:'payment',DASH:'dash',WORKOUT:'workout',EXERCISE:'exercise',COACH:'coach',NUTRITION:'nutrition',LEADERBOARD:'leaderboard',PROGRESS:'progress'};
 
 function Logo({size=80,animate=false}){
   return h('svg',{width:size,height:size,viewBox:'0 0 100 100',fill:'none',style:animate?{animation:'pulse 2s ease-in-out infinite'}:{}},
@@ -57,7 +57,7 @@ function PhaseTag({phase}){
 }
 
 function BottomNav({screen,setScreen}){
-  const tabs=[{id:S.DASH,icon:'⚡',label:'Home'},{id:S.WORKOUT,icon:'💪',label:'Workout'},{id:S.COACH,icon:'💀',label:'Coach'},{id:S.NUTRITION,icon:'🥗',label:'Nutrition'},{id:S.LEADERBOARD,icon:'🏆',label:'Ranks'}];
+  const tabs=[{id:S.DASH,icon:'⚡',label:'Home'},{id:S.WORKOUT,icon:'💪',label:'Workout'},{id:S.COACH,icon:'💀',label:'Coach'},{id:S.NUTRITION,icon:'🥗',label:'Nutrition'},{id:S.PROGRESS,icon:'📸',label:'Progress'}];
   return h('div',{style:{position:'fixed',bottom:0,left:'50%',transform:'translateX(-50%)',width:'100%',maxWidth:430,background:C.navy,borderTop:`1px solid ${C.navyLight}`,display:'flex',justifyContent:'space-around',padding:'10px 0 22px',zIndex:100}},
     tabs.map(t=>h('button',{key:t.id,onClick:()=>setScreen(t.id),className:'btn',style:{background:'none',display:'flex',flexDirection:'column',alignItems:'center',gap:3,color:screen===t.id?C.blue:C.silverDim}},
       h('span',{style:{fontSize:20}},t.icon),
@@ -534,6 +534,140 @@ function PaymentScreen({setScreen,user}){
   );
 }
 
+function ProgressScreen({setScreen,user,profile,setProfile}){
+  const [uploading,setUploading]=useState(false);
+  const [analyzing,setAnalyzing]=useState(false);
+  const [result,setResult]=useState(null);
+  const [error,setError]=useState('');
+  const [photos,setPhotos]=useState([]);
+
+  useEffect(()=>{if(user)loadPhotos();},[user]);
+
+  const loadPhotos=async()=>{
+    const{data}=await sb.from('profiles').select('body_score,body_feedback,last_photo_date').eq('id',user.id).single();
+    if(data?.body_score){setResult({score:data.body_score,feedback:data.body_feedback});}
+  };
+
+  const handlePhoto=async(e)=>{
+    const file=e.target.files[0];
+    if(!file)return;
+    setUploading(true);setError('');setResult(null);
+
+    try{
+      // Upload to Supabase storage
+      const fileName=`${user.id}/${Date.now()}.jpg`;
+      const{error:uploadError}=await sb.storage.from('body-photos').upload(fileName,file);
+      if(uploadError)throw uploadError;
+
+      // Convert to base64 for AI analysis
+      const reader=new FileReader();
+      reader.onload=async(ev)=>{
+        const base64=ev.target.result.split(',')[1];
+        setUploading(false);setAnalyzing(true);
+
+        try{
+          const res=await fetch('https://api.anthropic.com/v1/messages',{
+            method:'POST',
+            headers:{'Content-Type':'application/json'},
+            body:JSON.stringify({
+              model:'claude-sonnet-4-6',
+              max_tokens:1000,
+              system:`You are Coach Skelly from HBHM fitness app. You analyze body photos and give honest, science-based feedback. Score the person's body out of 10 based on visible fitness, body composition, and posture. Be direct but constructive. Format your response as JSON only: {"score": 6.5, "overall": "Your honest overall assessment", "stomach": "assessment", "shoulders": "assessment", "chest": "assessment", "legs": "assessment", "advice": "what to focus on in Phase 1"}`,
+              messages:[{role:'user',content:[
+                {type:'image',source:{type:'base64',media_type:'image/jpeg',data:base64}},
+                {type:'text',text:'Analyze this body photo and give me an honest Coach Skelly assessment. Return JSON only.'}
+              ]}]
+            })
+          });
+          const data=await res.json();
+          const text=data.content?.[0]?.text||'{}';
+          const clean=text.replace(/```json|```/g,'').trim();
+          const parsed=JSON.parse(clean);
+          setResult(parsed);
+
+          // Save to profile
+          await sb.from('profiles').update({
+            body_score:parsed.score,
+            body_feedback:parsed.overall,
+            last_photo_date:new Date().toISOString().split('T')[0]
+          }).eq('id',user.id);
+          setProfile(p=>({...p,body_score:parsed.score}));
+        }catch(err){setError('Analysis failed. Try again.');}
+        setAnalyzing(false);
+      };
+      reader.readAsDataURL(file);
+    }catch(err){setError(err.message);setUploading(false);}
+  };
+
+  const lastDate=profile?.last_photo_date;
+  const daysSince=lastDate?Math.floor((new Date()-new Date(lastDate))/(1000*60*60*24)):null;
+  const canUpload=!lastDate||daysSince>=7;
+
+  return h('div',{style:{minHeight:'100vh',background:C.navy,padding:'54px 24px 100px'}},
+    h('div',{style:{fontSize:11,color:C.blue,fontWeight:700,letterSpacing:2,marginBottom:4}},'BODY PROGRESS'),
+    h('div',{style:{fontSize:26,fontWeight:900,color:C.silverBright,marginBottom:4}},'Weekly Check-In'),
+    h('div',{style:{fontSize:13,color:C.silverDim,marginBottom:24}},'Coach Skelly scores your body out of 10 every week'),
+
+    // Current score card
+    profile?.body_score&&h('div',{style:{background:'linear-gradient(135deg,#1C3A6B,#0D2040)',borderRadius:20,padding:24,marginBottom:20,border:`1px solid ${C.blue}40`,textAlign:'center'}},
+      h('div',{style:{fontSize:11,color:C.blue,fontWeight:700,letterSpacing:2,marginBottom:8}},'YOUR CURRENT SCORE'),
+      h('div',{style:{fontSize:64,fontWeight:900,color:C.white,lineHeight:1}},profile.body_score),
+      h('div',{style:{fontSize:14,color:C.silverDim,marginTop:4}},'out of 10'),
+      lastDate&&h('div',{style:{fontSize:12,color:C.silverDim,marginTop:8}},'Last checked: '+new Date(lastDate).toLocaleDateString())
+    ),
+
+    // Result from latest analysis
+    result&&h('div',{style:{background:C.navyLight,borderRadius:16,padding:18,border:`1px solid ${C.border}`,marginBottom:20}},
+      h('div',{style:{display:'flex',gap:12,alignItems:'flex-start',marginBottom:16}},
+        h(Avatar,{size:40}),
+        h('div',null,
+          h('div',{style:{fontSize:12,color:C.blue,fontWeight:700,letterSpacing:1,marginBottom:4}},"COACH SKELLY'S ANALYSIS"),
+          h('div',{style:{fontSize:14,fontWeight:900,color:C.white}},result.score+'/10'),
+          h('div',{style:{fontSize:13,color:C.silver,lineHeight:1.6,marginTop:4}},result.overall)
+        )
+      ),
+      result.stomach&&h('div',{style:{display:'flex',flexDirection:'column',gap:8}},
+        ['stomach','shoulders','chest','legs'].map(part=>result[part]&&
+          h('div',{key:part,style:{background:C.navy,borderRadius:10,padding:'10px 14px'}},
+            h('div',{style:{fontSize:10,color:C.silverDim,fontWeight:700,letterSpacing:1,marginBottom:3}},part.toUpperCase()),
+            h('div',{style:{fontSize:13,color:C.silver}},result[part])
+          )
+        )
+      ),
+      result.advice&&h('div',{style:{background:`${C.success}10`,border:`1px solid ${C.success}30`,borderRadius:10,padding:14,marginTop:12}},
+        h('div',{style:{fontSize:11,color:C.success,fontWeight:700,marginBottom:4}},'COACH SKELLY SAYS'),
+        h('div',{style:{fontSize:13,color:C.silver,lineHeight:1.6}},result.advice)
+      )
+    ),
+
+    error&&h('div',{style:{background:`${C.danger}15`,border:`1px solid ${C.danger}40`,borderRadius:10,padding:12,marginBottom:16,fontSize:13,color:C.danger}},error),
+
+    // Upload section
+    canUpload?h('div',null,
+      h('label',{style:{display:'block',width:'100%',padding:'20px',background:analyzing||uploading?C.navyLight:'linear-gradient(135deg,#1D4ED8,#3B82F6)',borderRadius:14,cursor:'pointer',textAlign:'center',color:'#fff'}},
+        uploading?h('div',null,h('div',{style:{fontSize:20,marginBottom:8}},'⬆️'),h('div',{style:{fontSize:15,fontWeight:800}},'Uploading...')):
+        analyzing?h('div',null,h('div',{style:{fontSize:20,marginBottom:8}},'🔍'),h('div',{style:{fontSize:15,fontWeight:800}},'Coach Skelly is analyzing...')):
+        h('div',null,h('div',{style:{fontSize:32,marginBottom:8}},'📸'),h('div',{style:{fontSize:16,fontWeight:800}},'TAKE WEEKLY BODY PHOTO'),h('div',{style:{fontSize:12,marginTop:4,opacity:0.8}},'Coach Skelly will score your body out of 10')),
+        h('input',{type:'file',accept:'image/*',capture:'user',style:{display:'none'},onChange:handlePhoto,disabled:uploading||analyzing})
+      )
+    ):h('div',{style:{background:C.navyLight,borderRadius:14,padding:20,textAlign:'center',border:`1px solid ${C.border}`}},
+      h('div',{style:{fontSize:32,marginBottom:8}},'⏰'),
+      h('div',{style:{fontSize:14,fontWeight:700,color:C.silverBright}},'Next check-in in '+(7-daysSince)+' days'),
+      h('div',{style:{fontSize:12,color:C.silverDim,marginTop:4}},'Weekly photos keep Coach Skelly honest')
+    ),
+
+    h('div',{style:{marginTop:20,background:`${C.blue}10`,border:`1px solid ${C.blue}30`,borderRadius:14,padding:16,display:'flex',gap:12}},
+      h(Avatar,{size:36}),
+      h('div',{style:{fontSize:13,color:C.silver,lineHeight:1.6}},
+        profile?.body_score?
+        `"You're at a ${profile.body_score}/10. Keep hitting your non-negotiables and eating right. I want to see that number go up next week."`:
+        '"Submit your first body photo. I\'ll give you an honest assessment and we\'ll track your progress from there. No sugarcoating."'
+      )
+    ),
+    h(BottomNav,{screen:S.PROGRESS,setScreen})
+  );
+}
+
 function App(){
   const [screen,setScreen]=useState(S.LOADING);
   const [user,setUser]=useState(null);
@@ -566,6 +700,7 @@ function App(){
       case S.COACH:return h(CoachScreen,{setScreen});
       case S.NUTRITION:return h(NutritionScreen,{setScreen,user});
       case S.LEADERBOARD:return h(LeaderboardScreen,{setScreen});
+      case S.PROGRESS:return h(ProgressScreen,{setScreen,user,profile,setProfile});
       default:return null;
     }
   };
