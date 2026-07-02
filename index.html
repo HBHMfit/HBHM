@@ -1,3 +1,4 @@
+  <!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="utf-8"/>
@@ -21,12 +22,77 @@ input{font-family:inherit}
 <body>
 <div id="root"></div>
 <script>
-const {useState,useEffect,createElement:h} = React;
+const {useState,useEffect,useRef,createElement:h} = React;
 const {createClient} = supabase;
-const sb = createClient('https://dxpurntcbiplzjhpdisp.supabase.co','sb_publishable_yuJxW-ukJ4evDAiRhDBrGQ_pJtG9X0W');
+const sb = createClient(
+  'https://dxpurntcbiplzjhpdisp.supabase.co',
+  'sb_publishable_yuJxW-ukJ4evDAiRhDBrGQ_pJtG9X0W'
+);
+const ANTHROPIC_KEY = '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';
 
-const C={navy:'#0D1117',navyMid:'#141B26',navyLight:'#1C2535',border:'#2A3447',silver:'#C0C8D8',silverBright:'#E8ECF4',silverDim:'#6B7280',blue:'#3B82F6',white:'#FFFFFF',success:'#22C55E',warning:'#F59E0B',danger:'#EF4444'};
-const S={LOADING:'loading',AUTH:'auth',WELCOME:'welcome',ON1:'on1',ON2:'on2',ONBODY:'onbody',ON3:'on3',PAYMENT:'payment',DASH:'dash',WORKOUT:'workout',EXERCISE:'exercise',COACH:'coach',NUTRITION:'nutrition',LEADERBOARD:'leaderboard',PROGRESS:'progress'};
+const C={
+  navy:'#0D1117',navyMid:'#141B26',navyLight:'#1C2535',
+  border:'#2A3447',silver:'#C0C8D8',silverBright:'#E8ECF4',
+  silverDim:'#6B7280',blue:'#3B82F6',white:'#FFFFFF',
+  success:'#22C55E',warning:'#F59E0B',danger:'#EF4444'
+};
+
+const S={
+  LOADING:'loading',AUTH:'auth',WELCOME:'welcome',
+  ONBOARDING:'onboarding',PAYMENT:'payment',
+  DASH:'dash',WORKOUT:'workout',EXERCISE:'exercise',
+  COACH:'coach',NUTRITION:'nutrition',PROGRESS:'progress',
+  LEADERBOARD:'leaderboard'
+};
+
+const NONNEG_TIERS = {
+  1: [{id:'pushups',label:'Push-ups',target:25},{id:'chinups',label:'Chin-ups',target:5},{id:'pullups',label:'Pull-ups',target:5},{id:'situps',label:'Sit-ups',target:15},{id:'crunches',label:'Crunches',target:15},{id:'vsits',label:'V-Sits',target:15},{id:'sideplanks',label:'Side Planks',target:15,unit:'each side'},{id:'calfraises',label:'Calf Raises',target:25},{id:'squats',label:'Squats',target:25}],
+  2: [{id:'pushups',label:'Push-ups',target:35},{id:'chinups',label:'Chin-ups',target:7},{id:'pullups',label:'Pull-ups',target:7},{id:'situps',label:'Sit-ups',target:20},{id:'crunches',label:'Crunches',target:20},{id:'vsits',label:'V-Sits',target:20},{id:'sideplanks',label:'Side Planks',target:20,unit:'each side'},{id:'calfraises',label:'Calf Raises',target:35},{id:'squats',label:'Squats',target:35}],
+  3: [{id:'pushups',label:'Push-ups',target:50},{id:'chinups',label:'Chin-ups',target:10},{id:'pullups',label:'Pull-ups',target:10},{id:'situps',label:'Sit-ups',target:25},{id:'crunches',label:'Crunches',target:25},{id:'vsits',label:'V-Sits',target:25},{id:'sideplanks',label:'Side Planks',target:25,unit:'each side'},{id:'calfraises',label:'Calf Raises',target:50},{id:'squats',label:'Squats',target:50}]
+};
+
+const WORKOUTS = [
+  {id:1,name:'Hip Flexor Stretch',duration:'3 min',type:'Stretch',sets:'3 x 30 sec each side',primary:['Hip Flexors','Quads'],secondary:['Lower Back','Glutes'],tip:'Posterior tilt your pelvis. Feel the pull in front of your hip.',why:'Releases tight hip flexors. Critical for knee and lower back health.'},
+  {id:2,name:'Hamstring Stretch',duration:'3 min',type:'Stretch',sets:'3 x 30 sec each leg',primary:['Hamstrings','Calves'],secondary:['Lower Back'],tip:'Keep your back flat. Hinge at the hip not the waist.',why:'Tight hamstrings pull on your lower back causing pain.'},
+  {id:3,name:'Thoracic Spine Rotation',duration:'4 min',type:'Stretch',sets:'10 reps each side',primary:['Thoracic Spine','Upper Back'],secondary:['Lats','Shoulders'],tip:'Keep your hips still. Only your upper body rotates.',why:'Opens your spine and improves posture.'},
+  {id:4,name:'Pigeon Pose',duration:'4 min',type:'Stretch',sets:'2 x 60 sec each side',primary:['Glutes','Piriformis'],secondary:['Lower Back','Hip Flexors'],tip:'Square your hips to the ground. Breathe into the tight spots.',why:'The deepest glute stretch. Eliminates lower back pain.'},
+  {id:5,name:"Child's Pose",duration:'3 min',type:'Stretch',sets:'2 x 60 sec',primary:['Lower Back','Lats','Hips'],secondary:['Shoulders'],tip:'Arms stretched forward forehead to floor. Breathe deeply.',why:'Full body decompression. Releases the entire posterior chain.'},
+  {id:6,name:'Chest Opener Stretch',duration:'3 min',type:'Stretch',sets:'3 x 30 sec',primary:['Chest','Front Deltoids'],secondary:['Thoracic Spine'],tip:'Clasp hands behind back lift chest up and forward.',why:'Counteracts rounded shoulders. Improves posture immediately.'},
+  {id:7,name:'Seated Groin Stretch',duration:'3 min',type:'Stretch',sets:'3 x 30 sec',primary:['Groin','Inner Thigh'],secondary:['Lower Back','Hips'],tip:'Sit tall press knees toward ground with elbows. No bouncing.',why:'Opens the hips for squatting and running.'},
+  {id:8,name:'Calf Stretch',duration:'2 min',type:'Stretch',sets:'3 x 30 sec each leg',primary:['Gastrocnemius','Achilles'],secondary:['Ankle'],tip:'Straight leg for upper calf bent knee for lower calf.',why:'Tight calves cause knee pain and poor squat depth.'},
+  {id:9,name:'Neck Rolls',duration:'2 min',type:'Stretch',sets:'5 slow rolls each direction',primary:['Neck','Traps'],secondary:['Shoulders'],tip:'Never force it. Let gravity do the work.',why:'Releases tension from phones and stress.'},
+  {id:10,name:'Ankle Circles',duration:'2 min',type:'Stretch',sets:'20 circles each direction',primary:['Ankles','Calves'],secondary:['Achilles'],tip:'Slow and controlled full circles.',why:'Ankle mobility affects every movement you do.'},
+  {id:11,name:'Dead Bug',duration:'6 min',type:'Pilates',sets:'3 x 10 reps each side',primary:['Core','Lower Back'],secondary:['Hip Flexors','Shoulders'],tip:'Press your lower back INTO the floor the entire time.',why:'The most important core exercise. Teaches spine stability.'},
+  {id:12,name:'Bird Dog',duration:'5 min',type:'Pilates',sets:'3 x 10 reps each side',primary:['Core','Glutes','Lower Back'],secondary:['Shoulders','Balance'],tip:"Don't let your hips rotate. Stay perfectly level.",why:'Builds spinal stability and glute activation.'},
+  {id:13,name:'Glute Bridge',duration:'5 min',type:'Pilates',sets:'3 x 15 reps',primary:['Glutes','Hamstrings'],secondary:['Lower Back','Core'],tip:'Squeeze your glutes at the top. Hold 2 seconds.',why:'Activates dormant glutes. Most people\'s glutes don\'t fire properly.'},
+  {id:14,name:'Pelvic Tilts',duration:'3 min',type:'Pilates',sets:'3 x 15 reps',primary:['Lower Back','Core'],secondary:['Hip Flexors','Glutes'],tip:'Flatten your back to the floor then arch slightly.',why:'Restores natural spinal movement. Eliminates stiffness.'},
+  {id:15,name:'The Hundred',duration:'5 min',type:'Pilates',sets:'1 x 100 pumps',primary:['Core','Hip Flexors'],secondary:['Chest','Shoulders'],tip:'Legs at 45 degrees chin to chest pump arms. Breathe 5 in 5 out.',why:'Classic Pilates core endurance builder.'},
+  {id:16,name:'Single Leg Stretch',duration:'4 min',type:'Pilates',sets:'3 x 10 reps each side',primary:['Core','Hip Flexors'],secondary:['Quads'],tip:'Keep lower back pressed down. Alternate legs smoothly.',why:'Core stability with hip flexor activation.'},
+  {id:17,name:'Scissors',duration:'4 min',type:'Pilates',sets:'3 x 10 reps each side',primary:['Core','Hip Flexors','Hamstrings'],secondary:['Lower Back'],tip:'Keep both legs straight. Pull one toward you while lowering the other.',why:'Builds core strength and hamstring flexibility together.'},
+  {id:18,name:'Roll Up',duration:'4 min',type:'Pilates',sets:'3 x 8 reps',primary:['Core','Spine'],secondary:['Hamstrings','Back'],tip:'Peel your spine off the floor one vertebra at a time.',why:'Builds complete spinal flexibility and core control.'},
+  {id:19,name:'Side Leg Series',duration:'6 min',type:'Pilates',sets:'10 reps each direction each side',primary:['Glutes','Hip Abductors','Core'],secondary:['IT Band'],tip:"Stack hips perfectly. Don't let your body rock.",why:'Builds lateral hip strength that prevents knee and back injuries.'},
+  {id:20,name:'Swan Prep',duration:'4 min',type:'Pilates',sets:'3 x 10 reps',primary:['Lower Back','Glutes'],secondary:['Shoulders','Core'],tip:'Lift chest using your back muscles not your hands.',why:'Strengthens the posterior chain. Counteracts forward posture.'},
+  {id:21,name:'Morning Full Body Flow',duration:'10 min',type:'Flexibility',sets:'1 round',primary:['Full Body','Spine','Hips'],secondary:['Shoulders','Hamstrings'],tip:'Move slowly. Breathe into every position.',why:'Sets up your nervous system for the day.'},
+  {id:22,name:'Hip Mobility Flow',duration:'8 min',type:'Flexibility',sets:'2 rounds',primary:['Hip Flexors','Glutes','Hip Rotators'],secondary:['Lower Back','Groin'],tip:'Move in and out of each position. Explore the range.',why:'Open hips equal better everything.'},
+  {id:23,name:'Sun Salutation Flow',duration:'8 min',type:'Flexibility',sets:'3 rounds',primary:['Full Body','Hips','Spine'],secondary:['Hamstrings','Calves','Chest'],tip:'Link breath to movement. Inhale up exhale down.',why:'Complete full body flexibility sequence.'},
+  {id:24,name:'Lower Body Flow',duration:'10 min',type:'Flexibility',sets:'1 round',primary:['Hips','Hamstrings','Quads','Calves'],secondary:['Lower Back','Ankles'],tip:'Hold each position for at least 30 seconds.',why:'Targets every tight area in the lower body.'},
+  {id:25,name:'Spinal Wave',duration:'5 min',type:'Flexibility',sets:'3 x 5 reps',primary:['Entire Spine','Core'],secondary:['Shoulders','Hips'],tip:'Start from tailbone wave up through each vertebra.',why:'Restores spinal segmentation.'},
+  {id:26,name:'Burpees',duration:'8 min',type:'Conditioning',sets:'4 x 10 reps',primary:['Full Body','Cardiovascular'],secondary:['Core','Shoulders'],tip:'Jump up explosively. Drop fast. Push up clean.',why:'The ultimate conditioning exercise. Full body no equipment.'},
+  {id:27,name:'Jump Rope',duration:'10 min',type:'Conditioning',sets:'5 x 60 sec with 30 sec rest',primary:['Calves','Cardiovascular'],secondary:['Shoulders','Ankles'],tip:'Stay on the balls of your feet. Small bounces.',why:'Best bang for your buck cardio.'},
+  {id:28,name:'Bear Crawl',duration:'5 min',type:'Conditioning',sets:'3 x 20 meters',primary:['Core','Shoulders','Quads'],secondary:['Chest','Hips'],tip:'Knees just off the ground. Opposite arm and leg.',why:'Full body primal movement. Shoulder stability and core endurance.'},
+  {id:29,name:'Step Ups',duration:'6 min',type:'Conditioning',sets:'3 x 12 each leg',primary:['Quads','Glutes','Balance'],secondary:['Calves','Core'],tip:'Drive through your heel on the step.',why:'Single leg strength and balance.'},
+  {id:30,name:'Mountain Climbers',duration:'5 min',type:'Conditioning',sets:'3 x 10 each leg',primary:['Core','Hip Flexors','Shoulders'],secondary:['Chest','Quads'],tip:'SLOW. 3 seconds per rep. Core control not cardio.',why:'Teaches core to stabilize while legs move.'},
+  {id:31,name:'High Knees',duration:'5 min',type:'Conditioning',sets:'4 x 30 sec',primary:['Cardiovascular','Hip Flexors'],secondary:['Core','Coordination'],tip:'Drive knees up to hip height. Pump arms.',why:'Builds hip flexor strength and cardiovascular endurance.'},
+  {id:32,name:'Box Jumps',duration:'6 min',type:'Conditioning',sets:'4 x 8 reps',primary:['Quads','Glutes','Explosive Power'],secondary:['Core','Ankles'],tip:'Land softly with bent knees. Step down never jump down.',why:'Builds explosive power.'},
+  {id:33,name:'Walk Jog Intervals',duration:'15 min',type:'Conditioning',sets:'Walk 2 min jog 1 min x 5',primary:['Cardiovascular','Calves','Quads'],secondary:['Glutes','Hamstrings'],tip:'The jog should feel uncomfortable but manageable.',why:'Builds cardiovascular base without destroying your joints.'},
+  {id:34,name:'Push-Up',duration:'8 min',type:'Strength',sets:'4 x 20 reps',primary:['Chest','Triceps','Front Deltoids'],secondary:['Core','Serratus'],tip:'Elbows at 45 degrees. Body in a straight line.',why:'Master 100 push-ups and your strength transfers everywhere.'},
+  {id:35,name:'Bodyweight Squat',duration:'8 min',type:'Strength',sets:'4 x 15 reps',primary:['Quads','Glutes','Hamstrings'],secondary:['Core','Calves'],tip:'Drive knees out. Chest up. Weight in your heels.',why:'The foundation of lower body strength.'},
+  {id:36,name:'Pull-Up',duration:'10 min',type:'Strength',sets:'3 x max reps',primary:['Lats','Biceps','Upper Back'],secondary:['Rear Deltoids','Core'],tip:'Dead hang start. Pull elbows to hips not chin to bar.',why:'The king of upper body pulling.'},
+  {id:37,name:'Sit-Up',duration:'6 min',type:'Strength',sets:'3 x 25 reps',primary:['Core','Hip Flexors'],secondary:['Obliques'],tip:"Don't pull your neck. Exhale on the way up.",why:'Core strength that protects your lower back.'},
+  {id:38,name:'Calf Raise',duration:'5 min',type:'Strength',sets:'3 x 20 reps',primary:['Gastrocnemius','Soleus'],secondary:['Ankle Stabilizers'],tip:'Full range all the way down all the way up.',why:'Strengthens calves and ankles. Prevents knee pain.'},
+  {id:39,name:'V-Up',duration:'5 min',type:'Strength',sets:'3 x 15 reps',primary:['Core','Hip Flexors'],secondary:['Lower Back'],tip:'Reach hands and feet toward each other simultaneously.',why:'Advanced core strength builder.'},
+  {id:40,name:'Chin-Up',duration:'8 min',type:'Strength',sets:'3 x max reps',primary:['Biceps','Lats'],secondary:['Core','Upper Back'],tip:'Palms facing you. Full hang to chin over bar.',why:'Builds bicep and back strength simultaneously.'}
+];
 
 function Logo({size=80,animate=false}){
   return h('svg',{width:size,height:size,viewBox:'0 0 100 100',fill:'none',style:animate?{animation:'pulse 2s ease-in-out infinite'}:{}},
@@ -45,19 +111,20 @@ function Logo({size=80,animate=false}){
 }
 
 function Avatar({size=48,animate=false}){
-  return h('div',{style:{width:size,height:size,borderRadius:'50%',flexShrink:0,background:'linear-gradient(135deg,#141B26,#1C2535)',border:`1.5px solid ${C.border}`,display:'flex',alignItems:'center',justifyContent:'center',animation:animate?'pulse 2s ease-in-out infinite':undefined}},
+  return h('div',{style:{width:size,height:size,borderRadius:'50%',flexShrink:0,background:'linear-gradient(135deg,#141B26,#1C2535)',border:'1.5px solid #2A3447',display:'flex',alignItems:'center',justifyContent:'center',animation:animate?'pulse 2s ease-in-out infinite':undefined}},
     h(Logo,{size:size*0.68})
   );
 }
 
-function PhaseTag({phase}){
-  const d={1:{label:'PHASE 1 · RESTORE',color:C.success},2:{label:'PHASE 2 · CONDITION',color:C.warning},3:{label:'PHASE 3 · STRENGTHEN',color:C.danger}}[phase];
-  return h('span',{style:{fontSize:10,fontWeight:700,letterSpacing:1.5,color:d.color,background:d.color+'20',padding:'3px 10px',borderRadius:20,border:`1px solid ${d.color}40`}},d.label);
-}
-
 function BottomNav({screen,setScreen}){
-  const tabs=[{id:S.DASH,icon:'⚡',label:'Home'},{id:S.WORKOUT,icon:'💪',label:'Workout'},{id:S.COACH,icon:'💀',label:'Coach'},{id:S.NUTRITION,icon:'🥗',label:'Nutrition'},{id:S.PROGRESS,icon:'📸',label:'Progress'}];
-  return h('div',{style:{position:'fixed',bottom:0,left:'50%',transform:'translateX(-50%)',width:'100%',maxWidth:430,background:C.navy,borderTop:`1px solid ${C.navyLight}`,display:'flex',justifyContent:'space-around',padding:'10px 0 22px',zIndex:100}},
+  const tabs=[
+    {id:S.DASH,icon:'⚡',label:'Home'},
+    {id:S.WORKOUT,icon:'💪',label:'Workout'},
+    {id:S.COACH,icon:'💀',label:'Coach'},
+    {id:S.NUTRITION,icon:'🥗',label:'Nutrition'},
+    {id:S.PROGRESS,icon:'📸',label:'Progress'}
+  ];
+  return h('div',{style:{position:'fixed',bottom:0,left:'50%',transform:'translateX(-50%)',width:'100%',maxWidth:430,background:C.navy,borderTop:'1px solid #1C2535',display:'flex',justifyContent:'space-around',padding:'10px 0 22px',zIndex:100}},
     tabs.map(t=>h('button',{key:t.id,onClick:()=>setScreen(t.id),className:'btn',style:{background:'none',display:'flex',flexDirection:'column',alignItems:'center',gap:3,color:screen===t.id?C.blue:C.silverDim}},
       h('span',{style:{fontSize:20}},t.icon),
       h('span',{style:{fontSize:10,fontWeight:600}},t.label)
@@ -72,8 +139,8 @@ function AuthScreen({setScreen,setUser}){
   const [name,setName]=useState('');
   const [loading,setLoading]=useState(false);
   const [error,setError]=useState('');
-  const inp={width:'100%',padding:'14px 16px',borderRadius:12,fontSize:15,background:C.navyLight,border:`1.5px solid ${C.border}`,color:C.silverBright,outline:'none',boxSizing:'border-box'};
-  
+  const inp={width:'100%',padding:'14px 16px',borderRadius:12,fontSize:15,background:C.navyLight,border:'1.5px solid #2A3447',color:C.silverBright,outline:'none',boxSizing:'border-box'};
+
   const handle=async()=>{
     setError('');setLoading(true);
     try{
@@ -81,13 +148,15 @@ function AuthScreen({setScreen,setUser}){
         const{data,error:err}=await sb.auth.signUp({email,password,options:{data:{full_name:name}}});
         if(err)throw err;
         if(data.user){
-          await sb.from('profiles').upsert({id:data.user.id,full_name:name,email,phase:1,streak:0,points:0,created_at:new Date().toISOString()});
-          setUser(data.user);setScreen(S.WELCOME);
+          await sb.from('profiles').upsert({id:data.user.id,full_name:name,email,phase:1,tier:1,streak:0,points:0,created_at:new Date().toISOString()});
+          setUser(data.user);
+          setScreen(S.WELCOME);
         }
-      }else{
+      } else {
         const{data,error:err}=await sb.auth.signInWithPassword({email,password});
         if(err)throw err;
-        setUser(data.user);setScreen(S.DASH);
+        setUser(data.user);
+        setScreen(S.DASH);
       }
     }catch(err){setError(err.message);}
     setLoading(false);
@@ -103,151 +172,343 @@ function AuthScreen({setScreen,setUser}){
       ['signup','signin'].map(m=>h('button',{key:m,onClick:()=>setMode(m),className:'btn',style:{flex:1,padding:'10px 0',borderRadius:10,background:mode===m?C.blue:'transparent',color:mode===m?'#fff':C.silverDim,fontSize:14,fontWeight:700}},m==='signup'?'Sign Up':'Sign In'))
     ),
     h('div',{style:{display:'flex',flexDirection:'column',gap:14}},
-      mode==='signup'&&h('div',null,h('div',{style:{fontSize:11,color:C.silverDim,marginBottom:6,fontWeight:600,letterSpacing:1}},'YOUR NAME'),h('input',{style:inp,placeholder:'First name',value:name,onChange:e=>setName(e.target.value)})),
-      h('div',null,h('div',{style:{fontSize:11,color:C.silverDim,marginBottom:6,fontWeight:600,letterSpacing:1}},'EMAIL'),h('input',{style:inp,placeholder:'your@email.com',value:email,onChange:e=>setEmail(e.target.value),type:'email'})),
-      h('div',null,h('div',{style:{fontSize:11,color:C.silverDim,marginBottom:6,fontWeight:600,letterSpacing:1}},'PASSWORD'),h('input',{style:inp,placeholder:'Min. 6 characters',value:password,onChange:e=>setPassword(e.target.value),type:'password'}))
+      mode==='signup'&&h('div',null,
+        h('div',{style:{fontSize:11,color:C.silverDim,marginBottom:6,fontWeight:600,letterSpacing:1}},'YOUR NAME'),
+        h('input',{style:inp,placeholder:'First name',value:name,onChange:e=>setName(e.target.value)})
+      ),
+      h('div',null,
+        h('div',{style:{fontSize:11,color:C.silverDim,marginBottom:6,fontWeight:600,letterSpacing:1}},'EMAIL'),
+        h('input',{style:inp,placeholder:'your@email.com',value:email,onChange:e=>setEmail(e.target.value),type:'email'})
+      ),
+      h('div',null,
+        h('div',{style:{fontSize:11,color:C.silverDim,marginBottom:6,fontWeight:600,letterSpacing:1}},'PASSWORD'),
+        h('input',{style:inp,placeholder:'Min. 6 characters',value:password,onChange:e=>setPassword(e.target.value),type:'password'})
+      )
     ),
-    error&&h('div',{style:{background:`${C.danger}15`,border:`1px solid ${C.danger}40`,borderRadius:10,padding:12,marginTop:16,fontSize:13,color:C.danger}},error),
-    h('button',{onClick:handle,disabled:loading,className:'btn',style:{width:'100%',marginTop:24,padding:'16px 0',background:'linear-gradient(135deg,#1D4ED8,#3B82F6)',borderRadius:14,color:'#fff',fontSize:15,fontWeight:800,opacity:loading?0.7:1}},loading?'Please wait...':(mode==='signup'?'CREATE ACCOUNT':'SIGN IN')),
-    h('div',{style:{textAlign:'center',marginTop:12,fontSize:12,color:C.silverDim}},'$5/week · You only get one body')
+    error&&h('div',{style:{background:'#EF444415',border:'1px solid #EF444440',borderRadius:10,padding:12,marginTop:16,fontSize:13,color:C.danger}},error),
+    h('button',{onClick:handle,disabled:loading,className:'btn',style:{width:'100%',marginTop:24,padding:'16px 0',background:'linear-gradient(135deg,#1D4ED8,#3B82F6)',borderRadius:14,color:'#fff',fontSize:15,fontWeight:800,opacity:loading?0.7:1}},
+      loading?'Please wait...':(mode==='signup'?'CREATE ACCOUNT':'SIGN IN')
+    ),
+    h('div',{style:{textAlign:'center',marginTop:12,fontSize:12,color:C.silverDim}},'$5/week - You only get one body')
   );
 }
 
 const SLIDES=[
-  {icon:null,title:'Welcome to HBHM.',body:"I'm Coach Skelly. You only get one body. What you do with it every single day is your choice.",cta:"I'M READY →"},
-  {icon:'💀',title:"I don't do easy.",body:"Every day: log your non-negotiables, log your food, show me your body. No exceptions. No excuses.",cta:'UNDERSTOOD →'},
-  {icon:null,title:'Phase 1 — Restore.',body:"Everyone starts here. No exceptions. We fix your foundation first. Rushing to Phase 3 is how people get hurt.",cta:'MAKES SENSE →'},
-  {icon:'📋',title:'Daily Non-Negotiables.',body:'50 Push-ups · 10 Chin-ups · 10 Pull-ups\n25 Sit-ups · 25 Crunches · 25 V-Sits\n25 Side Planks each side\n50 Calf Raises · 50 Squats\n\nEvery. Single. Day.',cta:"I'LL DO IT →",highlight:true},
-  {icon:'🏆',title:'Earn everything.',body:"Phase 2 earned. Phase 3 earned. Top 5 leaderboard each month earn a free HBHM compression shirt.",cta:"LET'S BUILD →"},
+  {icon:null,title:'Welcome to HBHM.',body:"I'm Coach Skelly. You only get one body. What you do with it every single day is your choice.",cta:"I'M READY"},
+  {icon:'💀',title:"I don't do easy.",body:"Every day: log your non-negotiables, log your food, show me your body. No exceptions. No excuses.",cta:'UNDERSTOOD'},
+  {icon:null,title:'Phase 1 — Restore.',body:"Everyone starts here. No exceptions. We fix your foundation first. Rushing to Phase 3 is how people get hurt.",cta:'MAKES SENSE'},
+  {icon:'📋',title:'Daily Non-Negotiables.',body:'Push-ups. Chin-ups. Pull-ups. Sit-ups.\nCrunches. V-Sits. Side Planks.\nCalf Raises. Squats.\n\nEvery. Single. Day.',cta:"I'LL DO IT",highlight:true},
+  {icon:'🏆',title:'Earn everything.',body:"Phase 2 earned. Phase 3 earned. Top 5 leaderboard each month earn a free HBHM compression shirt.",cta:"LET'S BUILD"}
 ];
 
 function WelcomeScreen({setScreen}){
   const [slide,setSlide]=useState(0);
   const cur=SLIDES[slide];
-  const next=()=>slide===SLIDES.length-1?setScreen(S.ON1):setSlide(s=>s+1);
+  const next=()=>slide===SLIDES.length-1?setScreen(S.ONBOARDING):setSlide(s=>s+1);
   return h('div',{style:{minHeight:'100vh',background:C.navy,display:'flex',flexDirection:'column',padding:'60px 28px 40px'}},
     h('div',{style:{display:'flex',gap:6,marginBottom:40,justifyContent:'center'}},
       SLIDES.map((_,i)=>h('div',{key:i,style:{height:4,borderRadius:2,transition:'all 0.3s',width:i===slide?24:8,background:i===slide?C.blue:i<slide?C.silverDim:C.border}}))
     ),
     h('div',{style:{display:'flex',justifyContent:'center',marginBottom:28}},
-      h('div',{style:{width:100,height:100,borderRadius:'50%',background:'linear-gradient(135deg,#141B26,#1C2535)',border:`2px solid ${C.blue}40`,display:'flex',alignItems:'center',justifyContent:'center',boxShadow:`0 0 40px ${C.blue}20`,animation:'pulse 2s ease-in-out infinite'}},
+      h('div',{style:{width:100,height:100,borderRadius:'50%',background:'linear-gradient(135deg,#141B26,#1C2535)',border:'2px solid #3B82F640',display:'flex',alignItems:'center',justifyContent:'center',animation:'pulse 2s ease-in-out infinite'}},
         cur.icon?h('span',{style:{fontSize:44}},cur.icon):h(Logo,{size:68})
       )
     ),
     h('div',{style:{flex:1}},
       h('div',{style:{fontSize:11,color:C.blue,fontWeight:700,letterSpacing:2,marginBottom:12,textAlign:'center'}},'COACH SKELLY'),
       h('div',{style:{fontSize:24,fontWeight:900,color:C.silverBright,lineHeight:1.2,marginBottom:20,textAlign:'center'}},cur.title),
-      h('div',{style:{background:cur.highlight?`${C.blue}10`:C.navyLight,border:`1px solid ${cur.highlight?C.blue+'40':C.border}`,borderRadius:16,padding:20}},
+      h('div',{style:{background:cur.highlight?'#3B82F610':C.navyLight,border:'1px solid '+(cur.highlight?'#3B82F640':C.border),borderRadius:16,padding:20}},
         h('div',{style:{fontSize:14,color:C.silver,lineHeight:1.9,whiteSpace:'pre-line',textAlign:cur.highlight?'center':'left'}},cur.body)
       )
     ),
-    h('button',{onClick:next,className:'btn',style:{width:'100%',marginTop:24,padding:'17px 0',background:'linear-gradient(135deg,#1D4ED8,#3B82F6)',borderRadius:14,color:'#fff',fontSize:15,fontWeight:800}},cur.cta),
-    h('div',{style:{textAlign:'center',marginTop:10,fontSize:11,color:C.silverDim}},`${slide+1} of ${SLIDES.length}`)
+    h('button',{onClick:next,className:'btn',style:{width:'100%',marginTop:24,padding:'17px 0',background:'linear-gradient(135deg,#1D4ED8,#3B82F6)',borderRadius:14,color:'#fff',fontSize:15,fontWeight:800}},cur.cta+' →'),
+    h('div',{style:{textAlign:'center',marginTop:10,fontSize:11,color:C.silverDim}},(slide+1)+' of '+SLIDES.length)
+  );
+}
+
+function OnboardingFlow({setScreen,user,setProfile}){
+  const [step,setStep]=useState(0);
+  const [data,setData]=useState({fitness:'',goals:[],pain:[],equipment:'',budget:'',age:'',height:'',weight:''});
+  const STEPS=6;
+  const pct=Math.round(((step+1)/STEPS)*100);
+  const inp={width:'100%',padding:'12px 14px',borderRadius:10,fontSize:15,background:C.navy,border:'1.5px solid #2A3447',color:C.silverBright,outline:'none',boxSizing:'border-box',marginBottom:10};
+
+  const fitnessOpts=[
+    {id:'beginner',label:'Just starting out',sub:'Little to no exercise routine'},
+    {id:'some',label:'Some experience',sub:'Work out occasionally'},
+    {id:'active',label:'Regularly active',sub:'3-5x per week'},
+    {id:'athlete',label:'Athlete/Advanced',sub:'High performance training'}
+  ];
+  const goalOpts=['Lose weight','Build muscle','More energy','Fix injuries','Better flexibility','Mental clarity','Run farther','Get stronger'];
+  const painOpts=['Neck','Shoulders','Upper Back','Lower Back','Chest','Core/Abs','Hips/Glutes','Quads','Hamstrings','Knees','Calves','Ankles/Feet'];
+  const equipOpts=[
+    {id:'none',label:'Bodyweight Only',sub:'No equipment at home'},
+    {id:'home',label:'Home Equipment',sub:'Pull up bar, bands, dumbbells'},
+    {id:'gym',label:'Full Gym Access',sub:'Commercial gym membership'}
+  ];
+  const budgetOpts=[
+    {id:'tight',label:'Tight Budget',sub:'Under $50/week on food'},
+    {id:'moderate',label:'Moderate',sub:'$50-100/week on food'},
+    {id:'flexible',label:'Flexible',sub:'$100+ week on food'}
+  ];
+
+  const toggleGoal=g=>setData(d=>({...d,goals:d.goals.includes(g)?d.goals.filter(x=>x!==g):[...d.goals,g]}));
+  const togglePain=p=>setData(d=>({...d,pain:d.pain.includes(p)?d.pain.filter(x=>x!==p):[...d.pain,p]}));
+
+  const finish=async()=>{
+    await sb.from('profiles').update({
+      phase:1,tier:1,
+      pain_areas:data.pain,
+      equipment:data.equipment,
+      goal:data.goals.join(', '),
+      age:parseInt(data.age)||null,
+      height:data.height,
+      weight:data.weight
+    }).eq('id',user.id);
+    setProfile(p=>({...p,phase:1,tier:1}));
+    setScreen(S.PAYMENT);
+  };
+
+  const next=()=>step<STEPS-1?setStep(s=>s+1):finish();
+  const back=()=>step>0&&setStep(s=>s-1);
+  const canNext=()=>{
+    if(step===0)return data.fitness!=='';
+    if(step===1)return data.goals.length>0;
+    if(step===3)return data.equipment!=='';
+    if(step===4)return data.budget!=='';
+    return true;
+  };
+
+  const selBtn=(active,onClick,label,sub)=>h('button',{onClick,className:'btn',style:{padding:'16px 20px',borderRadius:14,textAlign:'left',background:active?'#3B82F620':C.navyLight,border:'1.5px solid '+(active?C.blue:C.border),width:'100%',marginBottom:10}},
+    h('div',{style:{fontSize:15,fontWeight:700,color:C.silverBright}},label),
+    sub&&h('div',{style:{fontSize:12,color:C.silverDim,marginTop:2}},sub)
+  );
+
+  return h('div',{style:{minHeight:'100vh',background:C.navy,padding:'54px 24px 40px'}},
+    h('div',{style:{height:4,background:C.border,borderRadius:2,marginBottom:24,overflow:'hidden'}},
+      h('div',{style:{height:'100%',borderRadius:2,background:C.blue,width:pct+'%',transition:'width 0.3s'}})
+    ),
+    h('div',{style:{fontSize:11,color:C.blue,fontWeight:700,letterSpacing:2,marginBottom:20}},'ASSESSMENT - STEP '+(step+1)+' OF '+STEPS),
+
+    step===0&&h('div',null,
+      h('div',{style:{display:'flex',alignItems:'center',gap:14,marginBottom:24}},
+        h(Avatar,{size:48}),
+        h('div',null,
+          h('div',{style:{fontSize:22,fontWeight:800,color:C.silverBright}},'Where are you right now?'),
+          h('div',{style:{fontSize:13,color:C.silverDim,marginTop:4}},'Be honest. Coach Skelly will know.')
+        )
+      ),
+      fitnessOpts.map(o=>selBtn(data.fitness===o.id,()=>setData(d=>({...d,fitness:o.id})),o.label,o.sub))
+    ),
+
+    step===1&&h('div',null,
+      h('div',{style:{display:'flex',alignItems:'center',gap:14,marginBottom:24}},
+        h(Avatar,{size:48}),
+        h('div',null,
+          h('div',{style:{fontSize:22,fontWeight:800,color:C.silverBright}},'What are your goals?'),
+          h('div',{style:{fontSize:13,color:C.silverDim,marginTop:4}},'Pick all that apply.')
+        )
+      ),
+      h('div',{style:{display:'flex',flexWrap:'wrap',gap:10}},
+        goalOpts.map(g=>h('button',{key:g,onClick:()=>toggleGoal(g),className:'btn',style:{padding:'10px 16px',borderRadius:24,fontSize:13,fontWeight:600,background:data.goals.includes(g)?'#3B82F625':C.navyLight,border:'1.5px solid '+(data.goals.includes(g)?C.blue:C.border),color:data.goals.includes(g)?C.silverBright:C.silverDim}},g))
+      )
+    ),
+
+    step===2&&h('div',null,
+      h('div',{style:{display:'flex',alignItems:'center',gap:14,marginBottom:16}},
+        h(Avatar,{size:48}),
+        h('div',null,
+          h('div',{style:{fontSize:20,fontWeight:800,color:C.silverBright}},'Where do you feel pain or tightness?'),
+          h('div',{style:{fontSize:12,color:C.silverDim,marginTop:4}},'Coach Skelly targets these in Phase 1.')
+        )
+      ),
+      h('div',{style:{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:14}},
+        painOpts.map(p=>h('button',{key:p,onClick:()=>togglePain(p),className:'btn',style:{padding:'12px',borderRadius:12,textAlign:'left',background:data.pain.includes(p)?'#EF444415':C.navyLight,border:'1.5px solid '+(data.pain.includes(p)?C.danger:C.border),display:'flex',alignItems:'center',gap:8}},
+          h('div',{style:{width:10,height:10,borderRadius:'50%',flexShrink:0,background:data.pain.includes(p)?C.danger:C.border}}),
+          h('span',{style:{fontSize:13,fontWeight:700,color:data.pain.includes(p)?C.silverBright:C.silver}},p)
+        ))
+      )
+    ),
+
+    step===3&&h('div',null,
+      h('div',{style:{display:'flex',alignItems:'center',gap:14,marginBottom:24}},
+        h(Avatar,{size:48}),
+        h('div',null,
+          h('div',{style:{fontSize:22,fontWeight:800,color:C.silverBright}},'What equipment do you have?'),
+          h('div',{style:{fontSize:13,color:C.silverDim,marginTop:4}},"We'll build your program around this.")
+        )
+      ),
+      equipOpts.map(o=>selBtn(data.equipment===o.id,()=>setData(d=>({...d,equipment:o.id})),o.label,o.sub))
+    ),
+
+    step===4&&h('div',null,
+      h('div',{style:{display:'flex',alignItems:'center',gap:14,marginBottom:24}},
+        h(Avatar,{size:48}),
+        h('div',null,
+          h('div',{style:{fontSize:22,fontWeight:800,color:C.silverBright}},'What is your food budget?'),
+          h('div',{style:{fontSize:13,color:C.silverDim,marginTop:4}},'Coach Skelly builds meals around what you can afford.')
+        )
+      ),
+      budgetOpts.map(o=>selBtn(data.budget===o.id,()=>setData(d=>({...d,budget:o.id})),o.label,o.sub))
+    ),
+
+    step===5&&h('div',null,
+      h('div',{style:{display:'flex',alignItems:'center',gap:14,marginBottom:24}},
+        h(Avatar,{size:48}),
+        h('div',null,
+          h('div',{style:{fontSize:22,fontWeight:800,color:C.silverBright}},'Your body stats'),
+          h('div',{style:{fontSize:13,color:C.silverDim,marginTop:4}},'Personalizes your calorie targets.')
+        )
+      ),
+      h('div',{style:{fontSize:11,color:C.silverDim,marginBottom:6,fontWeight:600,letterSpacing:1}},'AGE'),
+      h('input',{style:inp,placeholder:'e.g. 28',value:data.age,onChange:e=>setData(d=>({...d,age:e.target.value})),type:'number'}),
+      h('div',{style:{fontSize:11,color:C.silverDim,marginBottom:6,fontWeight:600,letterSpacing:1}},'HEIGHT'),
+      h('input',{style:inp,placeholder:"e.g. 5'10 or 178cm",value:data.height,onChange:e=>setData(d=>({...d,height:e.target.value}))}),
+      h('div',{style:{fontSize:11,color:C.silverDim,marginBottom:6,fontWeight:600,letterSpacing:1}},'WEIGHT (lbs)'),
+      h('input',{style:inp,placeholder:'e.g. 185',value:data.weight,onChange:e=>setData(d=>({...d,weight:e.target.value})),type:'number'})
+    ),
+
+    h('div',{style:{display:'flex',gap:12,marginTop:28}},
+      step>0&&h('button',{onClick:back,className:'btn',style:{padding:'16px 20px',background:C.navyLight,borderRadius:14,color:C.silverDim,fontSize:15,fontWeight:700}},'Back'),
+      h('button',{onClick:next,disabled:!canNext(),className:'btn',style:{flex:1,padding:'16px 0',background:canNext()?'linear-gradient(135deg,#1D4ED8,#3B82F6)':C.border,borderRadius:14,color:canNext()?'#fff':C.silverDim,fontSize:15,fontWeight:800}},
+        step===STEPS-1?'BUILD MY PROGRAM':'NEXT'
+      )
+    ),
+    step===2&&h('button',{onClick:next,className:'btn',style:{width:'100%',marginTop:10,padding:'12px 0',background:'transparent',border:'1px solid #2A3447',borderRadius:14,color:C.silverDim,fontSize:13}},'Skip - no pain areas')
+  );
+}
+
+function PaymentScreen({setScreen}){
+  return h('div',{style:{minHeight:'100vh',background:C.navy,padding:'60px 24px 40px'}},
+    h('div',{style:{display:'flex',justifyContent:'center',marginBottom:24}},h(Logo,{size:60,animate:true})),
+    h('div',{style:{fontSize:11,color:C.blue,fontWeight:700,letterSpacing:2,marginBottom:8,textAlign:'center'}},'UNLOCK HBHM'),
+    h('div',{style:{fontSize:26,fontWeight:800,color:C.silverBright,marginBottom:6,textAlign:'center'}},'Start your journey'),
+    h('div',{style:{fontSize:13,color:C.silverDim,marginBottom:28,textAlign:'center'}},'$5/week. Cancel anytime. You only get one body.'),
+    h('div',{style:{background:'linear-gradient(135deg,#1C3A6B,#0D2040)',borderRadius:16,padding:20,marginBottom:24,border:'1px solid #1D4ED840',display:'flex',justifyContent:'space-between',alignItems:'center'}},
+      h('div',null,
+        h('div',{style:{fontSize:11,color:C.silverDim,letterSpacing:1}},'WEEKLY PLAN'),
+        h('div',{style:{fontSize:36,fontWeight:900,color:C.white}},'$5',h('span',{style:{fontSize:14,fontWeight:400,color:C.silverDim}},'/week')),
+        h('div',{style:{fontSize:12,color:C.silver,marginTop:2}},'Low risk. High reward.')
+      ),
+      h(Avatar,{size:60})
+    ),
+    h('div',{style:{display:'flex',flexDirection:'column',gap:10,marginBottom:28}},
+      ['Coach Skelly AI coaching daily','Personalized Phase 1-3 program','Nutrition and body tracking','Mind and wellness accountability','Monthly leaderboard - win a shirt','Cancel anytime'].map(item=>
+        h('div',{key:item,style:{display:'flex',alignItems:'center',gap:10,fontSize:14,color:C.silver}},
+          h('span',{style:{color:C.success}},'✓'),item
+        )
+      )
+    ),
+    h('a',{href:'https://buy.stripe.com/8x28wP6q96Td3NW8vl3Nm00',style:{display:'block',width:'100%',padding:'16px 0',background:'linear-gradient(135deg,#1D4ED8,#3B82F6)',borderRadius:14,color:'#fff',fontSize:15,fontWeight:800,textAlign:'center',textDecoration:'none'}},'PAY $5/WEEK - START NOW'),
+    h('div',{style:{textAlign:'center',marginTop:12,fontSize:11,color:C.silverDim}},'Secured by Stripe - Cancel anytime'),
+    h('button',{onClick:()=>setScreen(S.DASH),className:'btn',style:{width:'100%',marginTop:12,padding:'12px 0',background:'transparent',border:'1px solid #2A3447',borderRadius:14,color:C.silverDim,fontSize:13}},'Skip for now (beta)')
   );
 }
 
 function DashScreen({setScreen,user,profile,setProfile}){
-  const NONNEG=[
-    {id:'pushups',label:'Push-ups',target:25,unit:'reps'},
-    {id:'chinups',label:'Chin-ups',target:5,unit:'reps'},
-    {id:'pullups',label:'Pull-ups',target:5,unit:'reps'},
-    {id:'situps',label:'Sit-ups',target:15,unit:'reps'},
-    {id:'crunches',label:'Crunches',target:15,unit:'reps'},
-    {id:'vsits',label:'V-Sits',target:15,unit:'reps'},
-    {id:'sideplanks',label:'Side Planks',target:15,unit:'each side'},
-    {id:'calfraises',label:'Calf Raises',target:25,unit:'reps'},
-    {id:'squats',label:'Squats',target:25,unit:'reps'},
-  ];
+  const tier=profile?.tier||1;
+  const NONNEG=NONNEG_TIERS[tier]||NONNEG_TIERS[1];
   const [checked,setChecked]=useState({});
-  const [todayLog,setTodayLog]=useState(null);
   const [saving,setSaving]=useState(false);
   const today=new Date().toISOString().split('T')[0];
 
   useEffect(()=>{
     if(!user)return;
-    loadTodayLog();
+    sb.from('daily_logs').select('nonneg_completed').eq('user_id',user.id).eq('date',today).maybeSingle().then(({data})=>{
+      if(data?.nonneg_completed)setChecked(data.nonneg_completed);
+    });
   },[user]);
-
-  const loadTodayLog=async()=>{
-    const{data}=await sb.from('daily_logs').select('*').eq('user_id',user.id).eq('date',today).single();
-    if(data){setTodayLog(data);setChecked(data.nonneg_completed||{});}
-  };
 
   const toggle=async(id)=>{
     const newChecked={...checked,[id]:!checked[id]};
-    setChecked(newChecked);
-    setSaving(true);
-    const doneCount=Object.values(newChecked).filter(Boolean).length;
-    const allDone=doneCount===NONNEG.length;
-    const points=allDone?50:0;
-    if(todayLog){
-      await sb.from('daily_logs').update({nonneg_completed:newChecked,points_earned:points}).eq('id',todayLog.id);
+    setChecked(newChecked);setSaving(true);
+    const done=Object.values(newChecked).filter(Boolean).length;
+    const allDone=done===NONNEG.length;
+    const{data:existing}=await sb.from('daily_logs').select('id').eq('user_id',user.id).eq('date',today).maybeSingle();
+    if(existing){
+      await sb.from('daily_logs').update({nonneg_completed:newChecked,points_earned:allDone?50:0}).eq('id',existing.id);
     }else{
-      const{data}=await sb.from('daily_logs').insert({user_id:user.id,date:today,nonneg_completed:newChecked,points_earned:points}).select().single();
-      setTodayLog(data);
+      await sb.from('daily_logs').insert({user_id:user.id,date:today,nonneg_completed:newChecked,points_earned:allDone?50:0});
     }
     if(allDone){
-      const newStreak=(profile?.streak||0)+1;
-      const newPoints=(profile?.points||0)+50;
-      await sb.from('profiles').update({streak:newStreak,points:newPoints,last_active:today}).eq('id',user.id);
-      setProfile(p=>({...p,streak:newStreak,points:newPoints}));
+      const ns=(profile?.streak||0)+1;
+      const np=(profile?.points||0)+50;
+      await sb.from('profiles').update({streak:ns,points:np,last_active:today}).eq('id',user.id);
+      setProfile(p=>({...p,streak:ns,points:np}));
     }
     setSaving(false);
   };
 
   const done=Object.values(checked).filter(Boolean).length;
   const all=done===NONNEG.length;
-  const first=profile?.full_name?.split(' ')[0]?.toUpperCase()||user?.email?.split('@')[0]?.toUpperCase()||'ATHLETE';
+  const first=profile?.full_name?.split(' ')[0]?.toUpperCase()||'ATHLETE';
 
   return h('div',{style:{minHeight:'100vh',background:C.navy,paddingBottom:100}},
-    h('div',{style:{padding:'54px 24px 20px',background:`linear-gradient(180deg,${C.navyMid},${C.navy})`}},
+    h('div',{style:{padding:'54px 24px 20px',background:'linear-gradient(180deg,#141B26,#0D1117)'}},
       h('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'flex-start'}},
         h('div',null,
           h('div',{style:{fontSize:13,color:C.silverDim,fontWeight:600}},'Good morning,'),
           h('div',{style:{fontSize:28,fontWeight:900,color:C.silverBright,letterSpacing:1}},first),
-          h('div',{style:{marginTop:6}},h(PhaseTag,{phase:profile?.phase||1}))
+          h('div',{style:{marginTop:6}},
+            h('span',{style:{fontSize:10,fontWeight:700,letterSpacing:1.5,color:C.success,background:'#22C55E20',padding:'3px 10px',borderRadius:20,border:'1px solid #22C55E40'}},'PHASE 1 - RESTORE')
+          )
         ),
         h('div',{style:{position:'relative'}},
           h(Avatar,{size:64}),
-          h('div',{style:{position:'absolute',bottom:-4,right:-4,background:all?C.success:C.warning,borderRadius:'50%',width:20,height:20,display:'flex',alignItems:'center',justifyContent:'center',fontSize:10,color:'#fff',fontWeight:800,border:`2px solid ${C.navy}`}},all?'✓':done)
+          h('div',{style:{position:'absolute',bottom:-4,right:-4,background:all?C.success:C.warning,borderRadius:'50%',width:20,height:20,display:'flex',alignItems:'center',justifyContent:'center',fontSize:10,color:'#fff',fontWeight:800,border:'2px solid #0D1117'}},all?'✓':done)
         )
       )
     ),
     h('div',{style:{padding:'0 24px'}},
       h('div',{style:{display:'flex',gap:12,marginBottom:20}},
-        h('div',{style:{flex:1,background:`${C.blue}10`,border:`1px solid ${C.blue}30`,borderRadius:16,padding:'14px 16px'}},h('div',{style:{fontSize:32}},'🔥'),h('div',{style:{fontSize:24,fontWeight:900,color:C.white}},profile?.streak||0),h('div',{style:{fontSize:11,color:C.silverDim}},'day streak')),
-        h('div',{style:{flex:1,background:`${C.warning}10`,border:`1px solid ${C.warning}30`,borderRadius:16,padding:'14px 16px'}},h('div',{style:{fontSize:32}},'🏆'),h('div',{style:{fontSize:18,fontWeight:900,color:C.white}},profile?.points||0),h('div',{style:{fontSize:11,color:C.silverDim}},'points')),
-        h('div',{style:{flex:1,background:`${C.success}10`,border:`1px solid ${C.success}30`,borderRadius:16,padding:'14px 16px',cursor:'pointer'}},h('div',{style:{fontSize:32}},'⌚'),h('div',{style:{fontSize:12,fontWeight:800,color:C.success}},'Watch'),h('div',{style:{fontSize:11,color:C.silverDim}},'Connect'))
+        h('div',{style:{flex:1,background:'#3B82F610',border:'1px solid #3B82F630',borderRadius:16,padding:'14px 16px'}},
+          h('div',{style:{fontSize:32}},'🔥'),
+          h('div',{style:{fontSize:24,fontWeight:900,color:C.white}},profile?.streak||0),
+          h('div',{style:{fontSize:11,color:C.silverDim}},'day streak')
+        ),
+        h('div',{style:{flex:1,background:'#F59E0B10',border:'1px solid #F59E0B30',borderRadius:16,padding:'14px 16px'}},
+          h('div',{style:{fontSize:32}},'🏆'),
+          h('div',{style:{fontSize:18,fontWeight:900,color:C.white}},profile?.points||0),
+          h('div',{style:{fontSize:11,color:C.silverDim}},'points')
+        ),
+        h('div',{style:{flex:1,background:'#22C55E10',border:'1px solid #22C55E30',borderRadius:16,padding:'14px 16px'}},
+          h('div',{style:{fontSize:32}},'📊'),
+          h('div',{style:{fontSize:14,fontWeight:800,color:C.success}},'Tier '+tier),
+          h('div',{style:{fontSize:11,color:C.silverDim}},'Phase 1')
+        )
       ),
       h('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10}},
         h('div',{style:{fontSize:12,color:C.silverDim,fontWeight:700,letterSpacing:1.5}},'DAILY NON-NEGOTIABLES'),
         h('div',{style:{fontSize:11,fontWeight:700,color:all?C.success:C.silver}},saving?'saving...':done+'/'+NONNEG.length)
       ),
-      h('div',{style:{height:4,background:C.border,borderRadius:2,marginBottom:12,overflow:'hidden'}},
-        h('div',{style:{height:'100%',borderRadius:2,background:all?C.success:C.blue,width:`${(done/NONNEG.length)*100}%`,transition:'width 0.3s'}})
+      h('div',{style:{height:4,background:C.border,borderRadius:2,marginBottom:16,overflow:'hidden'}},
+        h('div',{style:{height:'100%',borderRadius:2,background:all?C.success:C.blue,width:((done/NONNEG.length)*100)+'%',transition:'width 0.3s'}})
       ),
       h('div',{style:{display:'flex',flexDirection:'column',gap:8,marginBottom:20}},
         NONNEG.map(item=>{
           const d=!!checked[item.id];
-          return h('button',{key:item.id,onClick:()=>toggle(item.id),className:'btn',style:{background:d?`${C.success}12`:C.navyLight,border:`1.5px solid ${d?C.success+'60':C.border}`,borderRadius:12,padding:'12px 16px',display:'flex',alignItems:'center',gap:12,textAlign:'left',width:'100%'}},
+          return h('button',{key:item.id,onClick:()=>toggle(item.id),className:'btn',style:{background:d?'#22C55E12':C.navyLight,border:'1.5px solid '+(d?'#22C55E60':C.border),borderRadius:12,padding:'12px 16px',display:'flex',alignItems:'center',gap:12,textAlign:'left',width:'100%'}},
             h('div',{style:{width:28,height:28,borderRadius:'50%',flexShrink:0,background:d?C.success:C.border,display:'flex',alignItems:'center',justifyContent:'center',fontSize:13,color:'#fff',fontWeight:800}},d?'✓':''),
             h('div',{style:{flex:1}},h('span',{style:{fontSize:14,fontWeight:700,color:d?C.silverDim:C.silverBright,textDecoration:d?'line-through':'none'}},item.label)),
-            h('div',{style:{fontSize:13,fontWeight:800,color:d?C.success:C.silver}},item.target,' ',h('span',{style:{fontSize:10,color:C.silverDim}},item.unit))
+            h('div',{style:{fontSize:13,fontWeight:800,color:d?C.success:C.silver}},item.target,' ',h('span',{style:{fontSize:10,color:C.silverDim}},item.unit||'reps'))
           );
         })
       ),
-      all&&h('div',{style:{background:`${C.success}15`,border:`1px solid ${C.success}40`,borderRadius:14,padding:'14px 16px',marginBottom:20,display:'flex',gap:12,alignItems:'center'}},
+      all&&h('div',{style:{background:'#22C55E15',border:'1px solid #22C55E40',borderRadius:14,padding:'14px 16px',marginBottom:20,display:'flex',gap:12,alignItems:'center'}},
         h('div',{style:{fontSize:28}},'💪'),
-        h('div',null,h('div',{style:{fontSize:13,fontWeight:800,color:C.success}},'Non-negotiables done!'),h('div',{style:{fontSize:12,color:C.silverDim}},'Coach Skelly approves. Now hit your workout.'))
+        h('div',null,
+          h('div',{style:{fontSize:13,fontWeight:800,color:C.success}},'Non-negotiables done!'),
+          h('div',{style:{fontSize:12,color:C.silverDim}},'Coach Skelly approves. Now hit your workout.')
+        )
       ),
-      h('div',{style:{background:C.navyLight,borderRadius:16,padding:16,border:`1px solid ${C.border}`,display:'flex',gap:12}},
+      h('div',{style:{background:C.navyLight,borderRadius:16,padding:16,border:'1px solid #2A3447',display:'flex',gap:12}},
         h(Avatar,{size:40}),
         h('div',null,
           h('div',{style:{fontSize:12,color:C.blue,fontWeight:700,letterSpacing:1,marginBottom:4}},'COACH SKELLY'),
-          h('div',{style:{fontSize:13,color:C.silver,lineHeight:1.6}},all?'Non-negotiables done. Discipline. Now hit your workout.':`${NONNEG.length-done} non-negotiables left. No excuses.`),
+          h('div',{style:{fontSize:13,color:C.silver,lineHeight:1.6}},all?'Non-negotiables done. Discipline. Now hit your workout.':(NONNEG.length-done)+' non-negotiables left. No excuses.'),
           h('div',{style:{display:'flex',gap:8,marginTop:10}},
             h('button',{onClick:()=>setScreen(S.WORKOUT),className:'btn',style:{background:'linear-gradient(135deg,#1D4ED8,#3B82F6)',borderRadius:8,padding:'7px 14px',color:'#fff',fontSize:12,fontWeight:700}},'WORKOUT'),
-            h('button',{onClick:()=>setScreen(S.COACH),className:'btn',style:{background:'none',border:`1px solid ${C.blue}`,borderRadius:8,padding:'7px 14px',color:C.blue,fontSize:12,fontWeight:700}},'COACH')
+            h('button',{onClick:()=>setScreen(S.COACH),className:'btn',style:{background:'none',border:'1px solid #3B82F6',borderRadius:8,padding:'7px 14px',color:C.blue,fontSize:12,fontWeight:700}},'COACH')
           )
         )
       )
@@ -256,76 +517,33 @@ function DashScreen({setScreen,user,profile,setProfile}){
   );
 }
 
-function CoachScreen({setScreen}){
-  const [msgs,setMsgs]=useState([{role:'coach',text:"Welcome to Phase 1. Your joints, tendons, movement patterns — we fix these FIRST. Every day: 50 push-ups, 10 chin-ups, 10 pull-ups, 25 sit-ups, 25 crunches, 25 V-sits, 25 side planks each side, 50 calf raises, 50 squats. Non-negotiable. Ask me anything."}]);
-  const [input,setInput]=useState('');
-  const [loading,setLoading]=useState(false);
-  
-  const send=async()=>{
-    if(!input.trim()||loading)return;
-    const msg=input.trim();setInput('');
-    setMsgs(m=>[...m,{role:'user',text:msg}]);setLoading(true);
-    try{
-      const res=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({model:'claude-sonnet-4-6',max_tokens:1000,system:"You are Coach Skelly, AI fitness coach for HBHM. Direct, science-backed, zero excuses. Phase 1 Restore, Phase 2 Condition, Phase 3 Strengthen. Everyone starts Phase 1. Daily non-negotiables: 50 push-ups, 10 chin-ups, 10 pull-ups, 25 sit-ups, 25 crunches, 25 V-sits, 25 side planks each side, 50 calf raises, 50 squats. $5/week no free trial. 3-5 sentences max.",messages:[...msgs.map(m=>({role:m.role==='coach'?'assistant':'user',content:m.text})),{role:'user',content:msg}]})});
-      const data=await res.json();
-      setMsgs(m=>[...m,{role:'coach',text:data.content?.[0]?.text||'Stay focused.'}]);
-    }catch{setMsgs(m=>[...m,{role:'coach',text:'Connection issue. No excuses on the workout.'}]);}
-    setLoading(false);
-  };
-
-  return h('div',{style:{minHeight:'100vh',background:C.navy,display:'flex',flexDirection:'column',paddingBottom:140}},
-    h('div',{style:{padding:'54px 24px 16px',background:C.navyMid,borderBottom:`1px solid ${C.navyLight}`,display:'flex',alignItems:'center',gap:14}},
-      h(Avatar,{size:48,animate:true}),
-      h('div',null,h('div',{style:{fontSize:16,fontWeight:800,color:C.silverBright}},'Coach Skelly'),h('div',{style:{fontSize:11,color:C.success}},'● Online')),
-      h('div',{style:{marginLeft:'auto'}},h(PhaseTag,{phase:1}))
-    ),
-    h('div',{style:{flex:1,overflowY:'auto',padding:20,display:'flex',flexDirection:'column',gap:14}},
-      msgs.map((m,i)=>h('div',{key:i,style:{display:'flex',gap:10,flexDirection:m.role==='user'?'row-reverse':'row'}},
-        m.role==='coach'&&h(Avatar,{size:32}),
-        h('div',{style:{maxWidth:'78%',padding:'12px 16px',borderRadius:m.role==='user'?'18px 18px 4px 18px':'18px 18px 18px 4px',background:m.role==='user'?'linear-gradient(135deg,#1D4ED8,#3B82F6)':C.navyLight,fontSize:14,color:C.silverBright,lineHeight:1.6}},m.text)
-      )),
-      loading&&h('div',{style:{display:'flex',gap:10}},
-        h(Avatar,{size:32}),
-        h('div',{style:{background:C.navyLight,borderRadius:'18px 18px 18px 4px',padding:'12px 16px'}},
-          h('div',{style:{display:'flex',gap:4}},[0,1,2].map(i=>h('div',{key:i,style:{width:6,height:6,borderRadius:'50%',background:C.silverDim,animation:`bounce 1s ${i*0.2}s ease-in-out infinite`}})))
-        )
-      )
-    ),
-    h('div',{style:{position:'fixed',bottom:70,left:'50%',transform:'translateX(-50%)',width:'100%',maxWidth:430,padding:'12px 16px',background:C.navy,borderTop:`1px solid ${C.navyLight}`,display:'flex',gap:10}},
-      h('input',{value:input,onChange:e=>setInput(e.target.value),onKeyDown:e=>e.key==='Enter'&&send(),placeholder:'Ask Coach Skelly anything...',style:{flex:1,padding:'12px 16px',borderRadius:24,fontSize:14,background:C.navyLight,border:`1.5px solid ${C.border}`,color:C.silverBright,outline:'none'}}),
-      h('button',{onClick:send,className:'btn',style:{width:46,height:46,borderRadius:'50%',background:input.trim()?'linear-gradient(135deg,#1D4ED8,#3B82F6)':C.border,fontSize:18,color:'#fff',display:'flex',alignItems:'center',justifyContent:'center'}},'→')
-    ),
-    h(BottomNav,{screen:S.COACH,setScreen})
-  );
-}
-
-const WORKOUTS=[
-  {id:1,name:'Hip Flexor Stretch',duration:'3 min',type:'Stretch',sets:'3 × 30 sec each side',key:'stretch',primary:['Hip Flexors','Quads','Psoas'],secondary:['Lower Back','Glutes'],tip:'Posterior tilt your pelvis. Feel the pull in front of your hip, not your knee.'},
-  {id:2,name:'Bodyweight Squat',duration:'8 min',type:'Conditioning',sets:'4 × 15 reps',key:'squat',primary:['Quads','Glutes','Hamstrings'],secondary:['Core','Calves'],tip:'Drive knees out. Chest up. Weight in your heels.'},
-  {id:3,name:'Pull-Up',duration:'10 min',type:'Strength',sets:'3 × max reps',key:'pullup',primary:['Lats','Biceps','Upper Back'],secondary:['Rear Deltoids','Core'],tip:'Dead hang start. Pull elbows to hips, not chin to bar.'},
-  {id:4,name:'Sit-Up',duration:'6 min',type:'Core',sets:'3 × 25 reps',key:'situp',primary:['Rectus Abdominis','Hip Flexors'],secondary:['Obliques'],tip:"Don't pull your neck. Exhale on the way up."},
-  {id:5,name:'Push-Up',duration:'8 min',type:'Strength',sets:'4 × 20 reps',key:'pushup',primary:['Chest','Triceps','Front Deltoids'],secondary:['Core','Serratus'],tip:'Elbows at 45°. Body in a straight line. Full range.'},
-  {id:6,name:'Calf Raise',duration:'5 min',type:'Conditioning',sets:'3 × 20 reps',key:'calfraise',primary:['Gastrocnemius','Soleus'],secondary:['Ankle Stabilizers'],tip:'Full range — all the way down, all the way up. Slow and controlled.'},
-];
-
 function WorkoutScreen({setScreen,setEx}){
-  const tc={Stretch:C.success,Conditioning:C.warning,Strength:C.blue,Core:'#A855F7'};
-  const icons={Stretch:'🤸',Conditioning:'⚡',Strength:'💪',Core:'🎯'};
+  const [filter,setFilter]=useState('All');
+  const types=['All','Stretch','Pilates','Flexibility','Conditioning','Strength'];
+  const colors={Stretch:C.success,Pilates:'#A855F7',Flexibility:'#06B6D4',Conditioning:C.warning,Strength:C.blue};
+  const icons={Stretch:'🤸',Pilates:'🧘',Flexibility:'🌊',Conditioning:'⚡',Strength:'💪'};
+  const filtered=filter==='All'?WORKOUTS:WORKOUTS.filter(w=>w.type===filter);
+
   return h('div',{style:{minHeight:'100vh',background:C.navy,paddingBottom:100}},
-    h('div',{style:{padding:'54px 24px 20px',background:`linear-gradient(180deg,${C.navyMid},${C.navy})`}},
+    h('div',{style:{padding:'54px 24px 16px',background:'linear-gradient(180deg,#141B26,#0D1117)'}},
       h('div',{style:{fontSize:11,color:C.blue,fontWeight:700,letterSpacing:2,marginBottom:4}},'PHASE 1'),
-      h('div',{style:{fontSize:26,fontWeight:900,color:C.silverBright}},"Today's Workout"),
-      h('div',{style:{fontSize:13,color:C.silverDim,marginTop:4}},'Tap any exercise to learn more')
+      h('div',{style:{fontSize:26,fontWeight:900,color:C.silverBright}},'Workout Library'),
+      h('div',{style:{fontSize:13,color:C.silverDim,marginTop:4}},WORKOUTS.length+' exercises')
+    ),
+    h('div',{style:{padding:'12px 24px 8px',overflowX:'auto'}},
+      h('div',{style:{display:'flex',gap:8,paddingBottom:4}},
+        types.map(t=>h('button',{key:t,onClick:()=>setFilter(t),className:'btn',style:{padding:'7px 14px',borderRadius:20,fontSize:12,fontWeight:700,whiteSpace:'nowrap',flexShrink:0,background:filter===t?(colors[t]||C.blue):C.navyLight,color:filter===t?'#fff':C.silverDim,border:'1px solid '+(filter===t?(colors[t]||C.blue):C.border)}},t))
+      )
     ),
     h('div',{style:{padding:'0 24px'}},
       h('div',{style:{display:'flex',flexDirection:'column',gap:10}},
-        WORKOUTS.map(w=>h('button',{key:w.id,onClick:()=>{setEx(w);setScreen(S.EXERCISE);},className:'btn',style:{background:C.navyLight,borderRadius:14,padding:'14px 16px',border:`1px solid ${C.border}`,textAlign:'left',display:'flex',alignItems:'center',gap:14,width:'100%'}},
-          h('div',{style:{width:44,height:44,borderRadius:12,flexShrink:0,background:tc[w.type]+'20',border:`1px solid ${tc[w.type]}40`,display:'flex',alignItems:'center',justifyContent:'center',fontSize:20}},icons[w.type]),
+        filtered.map(w=>h('button',{key:w.id,onClick:()=>{setEx(w);setScreen(S.EXERCISE);},className:'btn',style:{background:C.navyLight,borderRadius:14,padding:'14px 16px',border:'1px solid #2A3447',textAlign:'left',display:'flex',alignItems:'center',gap:14,width:'100%'}},
+          h('div',{style:{width:44,height:44,borderRadius:12,flexShrink:0,background:(colors[w.type]||C.blue)+'20',border:'1px solid '+(colors[w.type]||C.blue)+'40',display:'flex',alignItems:'center',justifyContent:'center',fontSize:20}},icons[w.type]||'💪'),
           h('div',{style:{flex:1}},
             h('div',{style:{fontSize:14,fontWeight:700,color:C.silverBright}},w.name),
-            h('div',{style:{fontSize:11,color:C.silverDim,marginTop:2}},`${w.sets} · ${w.duration}`)
+            h('div',{style:{fontSize:11,color:C.silverDim,marginTop:2}},w.sets+' - '+w.duration)
           ),
-          h('span',{style:{fontSize:10,fontWeight:700,color:tc[w.type],background:tc[w.type]+'20',padding:'2px 8px',borderRadius:10}},w.type)
+          h('span',{style:{fontSize:10,fontWeight:700,color:colors[w.type]||C.blue,background:(colors[w.type]||C.blue)+'20',padding:'2px 8px',borderRadius:10,whiteSpace:'nowrap'}},w.type)
         ))
       )
     ),
@@ -337,47 +555,130 @@ function ExerciseScreen({setScreen,exercise}){
   const [started,setStarted]=useState(false);
   const [timer,setTimer]=useState(0);
   const [reps,setReps]=useState(0);
-  useEffect(()=>{if(!started)return;const i=setInterval(()=>setTimer(t=>t+1),1000);return()=>clearInterval(i);},[started]);
+  useEffect(()=>{
+    if(!started)return;
+    const i=setInterval(()=>setTimer(t=>t+1),1000);
+    return()=>clearInterval(i);
+  },[started]);
   if(!exercise)return null;
   const mm=String(Math.floor(timer/60)).padStart(2,'0');
   const ss=String(timer%60).padStart(2,'0');
+  const colors={Stretch:C.success,Pilates:'#A855F7',Flexibility:'#06B6D4',Conditioning:C.warning,Strength:C.blue};
+  const col=colors[exercise.type]||C.blue;
+
   return h('div',{style:{minHeight:'100vh',background:C.navy,padding:'54px 24px 40px'}},
-    h('button',{onClick:()=>setScreen(S.WORKOUT),className:'btn',style:{background:'none',color:C.blue,fontSize:13,fontWeight:700,marginBottom:20,padding:0}},'← Back'),
-    h('div',{style:{fontSize:11,color:C.blue,fontWeight:700,letterSpacing:2,marginBottom:6}},'COACH SKELLY'),
-    h('div',{style:{fontSize:24,fontWeight:900,color:C.silverBright,marginBottom:4}},exercise.name),
+    h('button',{onClick:()=>setScreen(S.WORKOUT),className:'btn',style:{background:'none',color:C.blue,fontSize:13,fontWeight:700,marginBottom:20,padding:0}},'Back to Library'),
+    h('div',{style:{fontSize:11,color:col,fontWeight:700,letterSpacing:2,marginBottom:6}},exercise.type.toUpperCase()),
+    h('div',{style:{fontSize:26,fontWeight:900,color:C.silverBright,marginBottom:4}},exercise.name),
     h('div',{style:{fontSize:13,color:C.silverDim,marginBottom:20}},exercise.sets),
-    h('div',{style:{background:C.navyLight,borderRadius:16,padding:18,border:`1px solid ${C.border}`,marginBottom:12}},
+    h('div',{style:{background:C.navyLight,borderRadius:16,padding:18,border:'1px solid #2A3447',marginBottom:12}},
       h('div',{style:{fontSize:11,color:C.blue,fontWeight:700,letterSpacing:1.5,marginBottom:14}},'MUSCLES WORKED'),
       h('div',{style:{marginBottom:12}},
         h('div',{style:{fontSize:11,color:C.success,fontWeight:700,letterSpacing:1,marginBottom:8}},'PRIMARY'),
-        h('div',{style:{display:'flex',flexWrap:'wrap',gap:6}},exercise.primary.map(x=>h('span',{key:x,style:{background:`${C.success}15`,border:`1px solid ${C.success}40`,borderRadius:20,padding:'4px 12px',fontSize:12,fontWeight:600,color:C.success}},x)))
+        h('div',{style:{display:'flex',flexWrap:'wrap',gap:6}},
+          (exercise.primary||[]).map(x=>h('span',{key:x,style:{background:'#22C55E15',border:'1px solid #22C55E40',borderRadius:20,padding:'4px 12px',fontSize:12,fontWeight:600,color:C.success}},x))
+        )
       ),
       h('div',null,
         h('div',{style:{fontSize:11,color:C.silverDim,fontWeight:700,letterSpacing:1,marginBottom:8}},'SECONDARY'),
-        h('div',{style:{display:'flex',flexWrap:'wrap',gap:6}},exercise.secondary.map(x=>h('span',{key:x,style:{background:C.border,borderRadius:20,padding:'4px 12px',fontSize:12,fontWeight:600,color:C.silverDim}},x)))
+        h('div',{style:{display:'flex',flexWrap:'wrap',gap:6}},
+          (exercise.secondary||[]).map(x=>h('span',{key:x,style:{background:C.border,borderRadius:20,padding:'4px 12px',fontSize:12,fontWeight:600,color:C.silverDim}},x))
+        )
       )
     ),
-    h('div',{style:{background:`${C.warning}10`,border:`1px solid ${C.warning}30`,borderRadius:14,padding:16,marginBottom:16,display:'flex',gap:12}},
+    h('div',{style:{background:'#F59E0B10',border:'1px solid #F59E0B30',borderRadius:14,padding:16,marginBottom:12,display:'flex',gap:12}},
       h('span',{style:{fontSize:20}},'💡'),
-      h('div',null,h('div',{style:{fontSize:11,color:C.warning,fontWeight:700,letterSpacing:1,marginBottom:4}},'FORM TIP'),h('div',{style:{fontSize:13,color:C.silver,lineHeight:1.6}},exercise.tip))
+      h('div',null,
+        h('div',{style:{fontSize:11,color:C.warning,fontWeight:700,letterSpacing:1,marginBottom:4}},'FORM TIP'),
+        h('div',{style:{fontSize:13,color:C.silver,lineHeight:1.6}},exercise.tip)
+      )
     ),
-    h('div',{style:{background:`${C.blue}10`,border:`1px solid ${C.blue}30`,borderRadius:14,padding:'12px 16px',marginBottom:16,display:'flex',alignItems:'center',gap:12}},
-      h('div',{style:{width:36,height:36,borderRadius:10,background:`${C.blue}20`,display:'flex',alignItems:'center',justifyContent:'center',fontSize:18}},'💀'),
-      h('div',null,h('div',{style:{fontSize:13,fontWeight:700,color:C.silverBright}},'Coach Skelly Demo'),h('div',{style:{fontSize:11,color:C.blue}},'Animation coming soon'))
+    exercise.why&&h('div',{style:{background:'#3B82F610',border:'1px solid #3B82F630',borderRadius:14,padding:16,marginBottom:16,display:'flex',gap:12}},
+      h('span',{style:{fontSize:20}},'🎯'),
+      h('div',null,
+        h('div',{style:{fontSize:11,color:C.blue,fontWeight:700,letterSpacing:1,marginBottom:4}},'WHY THIS EXERCISE'),
+        h('div',{style:{fontSize:13,color:C.silver,lineHeight:1.6}},exercise.why)
+      )
     ),
     h('div',{style:{display:'flex',gap:12,marginBottom:16}},
-      h('div',{style:{flex:1,background:C.navyLight,borderRadius:14,padding:16,textAlign:'center',border:`1px solid ${C.border}`}},h('div',{style:{fontSize:28,fontWeight:900,color:C.white}},`${mm}:${ss}`),h('div',{style:{fontSize:11,color:C.silverDim,marginTop:4}},'TIMER')),
-      h('div',{style:{flex:1,background:C.navyLight,borderRadius:14,padding:16,textAlign:'center',border:`1px solid ${C.border}`}},
+      h('div',{style:{flex:1,background:C.navyLight,borderRadius:14,padding:16,textAlign:'center',border:'1px solid #2A3447'}},
+        h('div',{style:{fontSize:28,fontWeight:900,color:C.white}},mm+':'+ss),
+        h('div',{style:{fontSize:11,color:C.silverDim,marginTop:4}},'TIMER')
+      ),
+      h('div',{style:{flex:1,background:C.navyLight,borderRadius:14,padding:16,textAlign:'center',border:'1px solid #2A3447'}},
         h('div',{style:{fontSize:28,fontWeight:900,color:C.blue}},reps),
         h('div',{style:{fontSize:11,color:C.silverDim,marginTop:4}},'REPS'),
         h('div',{style:{display:'flex',gap:6,justifyContent:'center',marginTop:6}},
-          h('button',{onClick:()=>setReps(r=>Math.max(0,r-1)),className:'btn',style:{width:28,height:28,borderRadius:'50%',background:C.border,color:C.silver,fontSize:16,fontWeight:700}},'−'),
+          h('button',{onClick:()=>setReps(r=>Math.max(0,r-1)),className:'btn',style:{width:28,height:28,borderRadius:'50%',background:C.border,color:C.silver,fontSize:16,fontWeight:700}},'-'),
           h('button',{onClick:()=>setReps(r=>r+1),className:'btn',style:{width:28,height:28,borderRadius:'50%',background:C.blue,color:'#fff',fontSize:16,fontWeight:700}},'+')
         )
       )
     ),
-    h('button',{onClick:()=>setStarted(s=>!s),className:'btn',style:{width:'100%',padding:'16px 0',background:started?`${C.warning}30`:'linear-gradient(135deg,#1D4ED8,#3B82F6)',border:`1px solid ${started?C.warning:'transparent'}`,borderRadius:14,color:started?C.warning:'#fff',fontSize:15,fontWeight:800}},started?'⏸ PAUSE':'▶ START SET'),
-    h('button',{onClick:()=>setScreen(S.WORKOUT),className:'btn',style:{width:'100%',marginTop:10,padding:'14px 0',background:'transparent',border:`1px solid ${C.success}`,borderRadius:14,color:C.success,fontSize:14,fontWeight:700}},'✓ MARK COMPLETE')
+    h('button',{onClick:()=>setStarted(s=>!s),className:'btn',style:{width:'100%',padding:'16px 0',background:started?'#F59E0B30':'linear-gradient(135deg,#1D4ED8,#3B82F6)',border:'1px solid '+(started?C.warning:'transparent'),borderRadius:14,color:started?C.warning:'#fff',fontSize:15,fontWeight:800}},started?'PAUSE':'START SET'),
+    h('button',{onClick:()=>setScreen(S.WORKOUT),className:'btn',style:{width:'100%',marginTop:10,padding:'14px 0',background:'transparent',border:'1px solid #22C55E',borderRadius:14,color:C.success,fontSize:14,fontWeight:700}},'MARK COMPLETE')
+  );
+}
+
+function CoachScreen({setScreen}){
+  const [msgs,setMsgs]=useState([{role:'coach',text:"Welcome to Phase 1. Your joints, tendons, movement patterns - we fix these FIRST. Daily non-negotiables, food logging, weekly body photo. No exceptions. Ask me anything."}]);
+  const [input,setInput]=useState('');
+  const [loading,setLoading]=useState(false);
+  const bottomRef=useRef(null);
+
+  useEffect(()=>{if(bottomRef.current)bottomRef.current.scrollIntoView({behavior:'smooth'});},[msgs]);
+
+  const send=async()=>{
+    if(!input.trim()||loading)return;
+    const msg=input.trim();setInput('');
+    setMsgs(m=>[...m,{role:'user',text:msg}]);setLoading(true);
+    try{
+      const res=await fetch('https://api.anthropic.com/v1/messages',{
+        method:'POST',
+        headers:{'Content-Type':'application/json','x-api-key':ANTHROPIC_KEY,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
+        body:JSON.stringify({
+          model:'claude-sonnet-4-6',
+          max_tokens:1000,
+          system:"You are Coach Skelly, AI fitness coach for HBHM app. You are direct, science-backed, and accept zero excuses. You know the three phases: Phase 1 Restore (fix body, mobility, Pilates, flexibility, bodyweight - 30 days), Phase 2 Condition (hard running, explosive, military style - 8-12 weeks), Phase 3 Strengthen (brute strength, gym lifting - 12 weeks). Everyone starts Phase 1. Daily non-negotiables scale in tiers. Weekly body photo scoring. $5/week subscription. Keep responses to 3-5 sentences. Be direct and motivating.",
+          messages:[...msgs.map(m=>({role:m.role==='coach'?'assistant':'user',content:m.text})),{role:'user',content:msg}]
+        })
+      });
+      const data=await res.json();
+      const text=data.content?.[0]?.text;
+      setMsgs(m=>[...m,{role:'coach',text:text||'Stay focused. No excuses.'}]);
+    }catch(e){
+      setMsgs(m=>[...m,{role:'coach',text:'Connection issue. Keep grinding - no excuses on the workout.'}]);
+    }
+    setLoading(false);
+  };
+
+  return h('div',{style:{minHeight:'100vh',background:C.navy,display:'flex',flexDirection:'column',paddingBottom:140}},
+    h('div',{style:{padding:'54px 24px 16px',background:C.navyMid,borderBottom:'1px solid #1C2535',display:'flex',alignItems:'center',gap:14}},
+      h(Avatar,{size:48,animate:true}),
+      h('div',null,
+        h('div',{style:{fontSize:16,fontWeight:800,color:C.silverBright}},'Coach Skelly'),
+        h('div',{style:{fontSize:11,color:C.success}},'Online')
+      )
+    ),
+    h('div',{style:{flex:1,overflowY:'auto',padding:20,display:'flex',flexDirection:'column',gap:14}},
+      msgs.map((m,i)=>h('div',{key:i,style:{display:'flex',gap:10,flexDirection:m.role==='user'?'row-reverse':'row'}},
+        m.role==='coach'&&h(Avatar,{size:32}),
+        h('div',{style:{maxWidth:'78%',padding:'12px 16px',borderRadius:m.role==='user'?'18px 18px 4px 18px':'18px 18px 18px 4px',background:m.role==='user'?'linear-gradient(135deg,#1D4ED8,#3B82F6)':C.navyLight,fontSize:14,color:C.silverBright,lineHeight:1.6}},m.text)
+      )),
+      loading&&h('div',{style:{display:'flex',gap:10}},
+        h(Avatar,{size:32}),
+        h('div',{style:{background:C.navyLight,borderRadius:'18px 18px 18px 4px',padding:'12px 16px'}},
+          h('div',{style:{display:'flex',gap:4}},
+            [0,1,2].map(i=>h('div',{key:i,style:{width:6,height:6,borderRadius:'50%',background:C.silverDim,animation:'bounce 1s '+(i*0.2)+'s ease-in-out infinite'}}))
+          )
+        )
+      ),
+      h('div',{ref:bottomRef})
+    ),
+    h('div',{style:{position:'fixed',bottom:70,left:'50%',transform:'translateX(-50%)',width:'100%',maxWidth:430,padding:'12px 16px',background:C.navy,borderTop:'1px solid #1C2535',display:'flex',gap:10}},
+      h('input',{value:input,onChange:e=>setInput(e.target.value),onKeyDown:e=>e.key==='Enter'&&send(),placeholder:'Ask Coach Skelly anything...',style:{flex:1,padding:'12px 16px',borderRadius:24,fontSize:14,background:C.navyLight,border:'1.5px solid #2A3447',color:C.silverBright,outline:'none'}}),
+      h('button',{onClick:send,className:'btn',style:{width:46,height:46,borderRadius:'50%',background:input.trim()?'linear-gradient(135deg,#1D4ED8,#3B82F6)':C.border,fontSize:18,color:'#fff',display:'flex',alignItems:'center',justifyContent:'center'}},'→')
+    ),
+    h(BottomNav,{screen:S.COACH,setScreen})
   );
 }
 
@@ -386,31 +687,26 @@ function NutritionScreen({setScreen,user}){
   const [loading,setLoading]=useState(true);
   const [adding,setAdding]=useState(false);
   const [analyzing,setAnalyzing]=useState(false);
-  const [mealName,setMealName]=useState('');
-  const [mealCal,setMealCal]=useState('');
-  const [mealProtein,setMealProtein]=useState('');
-  const [mealCarbs,setMealCarbs]=useState('');
-  const [mealFat,setMealFat]=useState('');
+  const [form,setForm]=useState({name:'',cal:'',protein:'',carbs:'',fat:''});
   const today=new Date().toISOString().split('T')[0];
 
-  useEffect(()=>{if(user)loadMeals();},[user]);
+  useEffect(()=>{if(user)load();},[user]);
 
-  const loadMeals=async()=>{
+  const load=async()=>{
     setLoading(true);
-    const{data}=await sb.from('daily_logs').select('meals').eq('user_id',user.id).eq('date',today).single();
+    const{data}=await sb.from('daily_logs').select('meals,id').eq('user_id',user.id).eq('date',today).maybeSingle();
     if(data?.meals)setMeals(data.meals);
     setLoading(false);
   };
 
-  const saveMeals=async(newMeals)=>{
-    const{data:existing}=await sb.from('daily_logs').select('id').eq('user_id',user.id).eq('date',today).single();
-    if(existing){await sb.from('daily_logs').update({meals:newMeals}).eq('id',existing.id);}
+  const save=async(newMeals)=>{
+    const{data:ex}=await sb.from('daily_logs').select('id').eq('user_id',user.id).eq('date',today).maybeSingle();
+    if(ex){await sb.from('daily_logs').update({meals:newMeals}).eq('id',ex.id);}
     else{await sb.from('daily_logs').insert({user_id:user.id,date:today,meals:newMeals});}
   };
 
   const analyzePhoto=async(e)=>{
-    const file=e.target.files[0];
-    if(!file)return;
+    const file=e.target.files[0];if(!file)return;
     setAnalyzing(true);
     const reader=new FileReader();
     reader.onload=async(ev)=>{
@@ -418,189 +714,110 @@ function NutritionScreen({setScreen,user}){
       try{
         const res=await fetch('https://api.anthropic.com/v1/messages',{
           method:'POST',
-          headers:{'Content-Type':'application/json'},
+          headers:{'Content-Type':'application/json','x-api-key':ANTHROPIC_KEY,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
           body:JSON.stringify({
-            model:'claude-sonnet-4-6',
-            max_tokens:500,
-            system:'You analyze food photos and estimate nutritional content. Return JSON only with these exact fields: {"name": "meal name", "calories": 450, "protein": 35, "carbs": 40, "fat": 12}. Be realistic with estimates.',
-            messages:[{role:'user',content:[
-              {type:'image',source:{type:'base64',media_type:'image/jpeg',data:base64}},
-              {type:'text',text:'What is this food and what are the estimated macros? Return JSON only.'}
-            ]}]
+            model:'claude-sonnet-4-6',max_tokens:300,
+            system:'Analyze food photos and return JSON only. Format: {"name":"meal name","calories":450,"protein":35,"carbs":40,"fat":12}. Be realistic.',
+            messages:[{role:'user',content:[{type:'image',source:{type:'base64',media_type:'image/jpeg',data:base64}},{type:'text',text:'Analyze this food. Return JSON only.'}]}]
           })
         });
         const data=await res.json();
         const text=data.content?.[0]?.text||'{}';
-        const clean=text.replace(/```json|```/g,'').trim();
-        const parsed=JSON.parse(clean);
-        setMealName(parsed.name||'');
-        setMealCal(String(parsed.calories||''));
-        setMealProtein(String(parsed.protein||''));
-        setMealCarbs(String(parsed.carbs||''));
-        setMealFat(String(parsed.fat||''));
+        const parsed=JSON.parse(text.replace(/```json|```/g,'').trim());
+        setForm({name:parsed.name||'',cal:String(parsed.calories||''),protein:String(parsed.protein||''),carbs:String(parsed.carbs||''),fat:String(parsed.fat||'')});
         setAdding(true);
-      }catch{setMealName('');setAdding(true);}
+      }catch(e){setAdding(true);}
       setAnalyzing(false);
     };
     reader.readAsDataURL(file);
   };
 
   const addMeal=async()=>{
-    if(!mealName.trim())return;
-    const newMeal={name:mealName,cal:parseInt(mealCal)||0,protein:parseInt(mealProtein)||0,carbs:parseInt(mealCarbs)||0,fat:parseInt(mealFat)||0,time:new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})};
-    const newMeals=[...meals,newMeal];
+    if(!form.name.trim())return;
+    const meal={name:form.name,cal:parseInt(form.cal)||0,protein:parseInt(form.protein)||0,carbs:parseInt(form.carbs)||0,fat:parseInt(form.fat)||0,time:new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})};
+    const newMeals=[...meals,meal];
     setMeals(newMeals);
-    setMealName('');setMealCal('');setMealProtein('');setMealCarbs('');setMealFat('');
+    setForm({name:'',cal:'',protein:'',carbs:'',fat:''});
     setAdding(false);
-    await saveMeals(newMeals);
+    await save(newMeals);
   };
 
-  const total={cal:meals.reduce((s,m)=>s+(m.cal||0),0),protein:meals.reduce((s,m)=>s+(m.protein||0),0),carbs:meals.reduce((s,m)=>s+(m.carbs||0),0),fat:meals.reduce((s,m)=>s+(m.fat||0),0)};
-  const target=2200;
-  const pct=Math.min(Math.round((total.cal/target)*100),100);
-  const inp={width:'100%',padding:'12px 14px',borderRadius:10,fontSize:14,background:C.navy,border:`1.5px solid ${C.border}`,color:C.silverBright,outline:'none',boxSizing:'border-box',marginBottom:10};
+  const totals={cal:meals.reduce((s,m)=>s+(m.cal||0),0),protein:meals.reduce((s,m)=>s+(m.protein||0),0),carbs:meals.reduce((s,m)=>s+(m.carbs||0),0),fat:meals.reduce((s,m)=>s+(m.fat||0),0)};
+  const pct=Math.min(Math.round((totals.cal/2200)*100),100);
+  const inp={width:'100%',padding:'12px 14px',borderRadius:10,fontSize:14,background:C.navy,border:'1.5px solid #2A3447',color:C.silverBright,outline:'none',boxSizing:'border-box',marginBottom:10};
 
   return h('div',{style:{minHeight:'100vh',background:C.navy,padding:'54px 24px 100px'}},
     h('div',{style:{fontSize:11,color:C.blue,fontWeight:700,letterSpacing:2,marginBottom:4}},'NUTRITION LOG'),
-    h('div',{style:{fontSize:26,fontWeight:900,color:C.silverBright,marginBottom:20}},"Today's Fuel"),
-
-    // Calorie ring
+    h('div',{style:{fontSize:26,fontWeight:900,color:C.silverBright,marginBottom:16}},"Today's Fuel"),
     h('div',{style:{background:C.navyLight,borderRadius:20,padding:20,display:'flex',alignItems:'center',gap:20,marginBottom:16}},
       h('div',{style:{position:'relative',width:80,height:80,flexShrink:0}},
         h('svg',{width:'80',height:'80',viewBox:'0 0 80 80'},
           h('circle',{cx:'40',cy:'40',r:'34',fill:'none',stroke:C.border,strokeWidth:'8'}),
-          h('circle',{cx:'40',cy:'40',r:'34',fill:'none',stroke:C.blue,strokeWidth:'8',strokeDasharray:`${2*Math.PI*34*pct/100} ${2*Math.PI*34}`,strokeLinecap:'round',transform:'rotate(-90 40 40)'})
+          h('circle',{cx:'40',cy:'40',r:'34',fill:'none',stroke:C.blue,strokeWidth:'8',strokeDasharray:(2*Math.PI*34*pct/100)+' '+(2*Math.PI*34),strokeLinecap:'round',transform:'rotate(-90 40 40)'})
         ),
-        h('div',{style:{position:'absolute',inset:0,display:'flex',alignItems:'center',justifyContent:'center'}},h('div',{style:{fontSize:14,fontWeight:900,color:C.white}},pct+'%'))
+        h('div',{style:{position:'absolute',inset:0,display:'flex',alignItems:'center',justifyContent:'center'}},
+          h('div',{style:{fontSize:14,fontWeight:900,color:C.white}},pct+'%')
+        )
       ),
       h('div',{style:{flex:1}},
-        h('div',{style:{fontSize:28,fontWeight:900,color:C.white}},total.cal.toLocaleString()),
-        h('div',{style:{fontSize:13,color:C.silverDim}},'of '+target.toLocaleString()+' kcal'),
-        h('div',{style:{display:'flex',gap:12,marginTop:8}},
-          h('div',{style:{fontSize:11,color:'#3B82F6'}},h('span',{style:{fontWeight:800}},total.protein+'g'),' protein'),
-          h('div',{style:{fontSize:11,color:'#F59E0B'}},h('span',{style:{fontWeight:800}},total.carbs+'g'),' carbs'),
-          h('div',{style:{fontSize:11,color:'#EF4444'}},h('span',{style:{fontWeight:800}},total.fat+'g'),' fat')
+        h('div',{style:{fontSize:28,fontWeight:900,color:C.white}},totals.cal.toLocaleString()),
+        h('div',{style:{fontSize:13,color:C.silverDim}},'of 2,200 kcal'),
+        h('div',{style:{display:'flex',gap:10,marginTop:8,flexWrap:'wrap'}},
+          h('div',{style:{fontSize:11,color:C.blue}},totals.protein+'g protein'),
+          h('div',{style:{fontSize:11,color:C.warning}},totals.carbs+'g carbs'),
+          h('div',{style:{fontSize:11,color:C.danger}},totals.fat+'g fat')
         )
       )
     ),
-
-    // Add meal buttons
     h('div',{style:{display:'flex',gap:10,marginBottom:16}},
-      h('label',{style:{flex:1,padding:'12px',background:analyzing?C.navyLight:`${C.success}20`,border:`1px solid ${C.success}40`,borderRadius:12,cursor:'pointer',textAlign:'center',color:C.success,fontSize:13,fontWeight:700,display:'flex',alignItems:'center',justifyContent:'center',gap:6}},
+      h('label',{style:{flex:1,padding:'12px',background:analyzing?C.navyLight:'#22C55E20',border:'1px solid #22C55E40',borderRadius:12,cursor:'pointer',textAlign:'center',color:C.success,fontSize:13,fontWeight:700}},
         analyzing?'Analyzing...':'📸 Photo',
         h('input',{type:'file',accept:'image/*',capture:'environment',style:{display:'none'},onChange:analyzePhoto,disabled:analyzing})
       ),
-      h('button',{onClick:()=>setAdding(true),className:'btn',style:{flex:1,padding:'12px',background:`${C.blue}20`,border:`1px solid ${C.blue}40`,borderRadius:12,color:C.blue,fontSize:13,fontWeight:700}},'✏️ Manual')
+      h('button',{onClick:()=>setAdding(true),className:'btn',style:{flex:1,padding:'12px',background:'#3B82F620',border:'1px solid #3B82F640',borderRadius:12,color:C.blue,fontSize:13,fontWeight:700}},'✏️ Manual')
     ),
-
-    // Add meal form
-    adding&&h('div',{style:{background:C.navyLight,borderRadius:14,padding:16,border:`1px solid ${C.blue}40`,marginBottom:14}},
+    adding&&h('div',{style:{background:C.navyLight,borderRadius:14,padding:16,border:'1px solid #3B82F640',marginBottom:14}},
       h('div',{style:{fontSize:12,color:C.blue,fontWeight:700,marginBottom:10}},'LOG A MEAL'),
-      h('input',{style:inp,placeholder:'Meal name',value:mealName,onChange:e=>setMealName(e.target.value)}),
+      h('input',{style:inp,placeholder:'Meal name',value:form.name,onChange:e=>setForm(f=>({...f,name:e.target.value}))}),
       h('div',{style:{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:10}},
-        h('div',null,h('div',{style:{fontSize:10,color:C.silverDim,marginBottom:4,fontWeight:600}},'CALORIES'),h('input',{style:{...inp,marginBottom:0},placeholder:'e.g. 450',value:mealCal,onChange:e=>setMealCal(e.target.value),type:'number'})),
-        h('div',null,h('div',{style:{fontSize:10,color:C.blue,marginBottom:4,fontWeight:600}},'PROTEIN (g)'),h('input',{style:{...inp,marginBottom:0},placeholder:'e.g. 35',value:mealProtein,onChange:e=>setMealProtein(e.target.value),type:'number'})),
-        h('div',null,h('div',{style:{fontSize:10,color:C.warning,marginBottom:4,fontWeight:600}},'CARBS (g)'),h('input',{style:{...inp,marginBottom:0},placeholder:'e.g. 40',value:mealCarbs,onChange:e=>setMealCarbs(e.target.value),type:'number'})),
-        h('div',null,h('div',{style:{fontSize:10,color:C.danger,marginBottom:4,fontWeight:600}},'FAT (g)'),h('input',{style:{...inp,marginBottom:0},placeholder:'e.g. 12',value:mealFat,onChange:e=>setMealFat(e.target.value),type:'number'}))
+        h('div',null,h('div',{style:{fontSize:10,color:C.silverDim,marginBottom:4,fontWeight:600}},'CALORIES'),h('input',{style:{...inp,marginBottom:0},placeholder:'450',value:form.cal,onChange:e=>setForm(f=>({...f,cal:e.target.value})),type:'number'})),
+        h('div',null,h('div',{style:{fontSize:10,color:C.blue,marginBottom:4,fontWeight:600}},'PROTEIN (g)'),h('input',{style:{...inp,marginBottom:0},placeholder:'35',value:form.protein,onChange:e=>setForm(f=>({...f,protein:e.target.value})),type:'number'})),
+        h('div',null,h('div',{style:{fontSize:10,color:C.warning,marginBottom:4,fontWeight:600}},'CARBS (g)'),h('input',{style:{...inp,marginBottom:0},placeholder:'40',value:form.carbs,onChange:e=>setForm(f=>({...f,carbs:e.target.value})),type:'number'})),
+        h('div',null,h('div',{style:{fontSize:10,color:C.danger,marginBottom:4,fontWeight:600}},'FAT (g)'),h('input',{style:{...inp,marginBottom:0},placeholder:'12',value:form.fat,onChange:e=>setForm(f=>({...f,fat:e.target.value})),type:'number'}))
       ),
       h('div',{style:{display:'flex',gap:10}},
         h('button',{onClick:addMeal,className:'btn',style:{flex:1,padding:'12px 0',background:'linear-gradient(135deg,#1D4ED8,#3B82F6)',borderRadius:10,color:'#fff',fontSize:14,fontWeight:700}},'LOG MEAL'),
         h('button',{onClick:()=>setAdding(false),className:'btn',style:{padding:'12px 16px',background:C.border,borderRadius:10,color:C.silverDim,fontSize:14}},'Cancel')
       )
     ),
-
-    // Meals list
     loading?h('div',{style:{textAlign:'center',color:C.silverDim,padding:20}},'Loading...'):
-    meals.length===0?
-      h('div',{style:{background:C.navyLight,borderRadius:14,padding:24,textAlign:'center',border:`1px solid ${C.border}`}},
-        h('div',{style:{fontSize:32,marginBottom:8}},'🥗'),
-        h('div',{style:{fontSize:14,color:C.silverDim}},'No meals logged yet.'),
-        h('div',{style:{fontSize:13,color:C.silverDim,marginTop:4}},'Snap a photo or add manually.')
-      ):
-      h('div',{style:{display:'flex',flexDirection:'column',gap:10,marginBottom:20}},
-        meals.map((m,i)=>h('div',{key:i,style:{background:C.navyLight,borderRadius:14,padding:'14px 16px',border:`1px solid ${C.border}`}},
-          h('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:6}},
-            h('div',{style:{fontSize:14,fontWeight:700,color:C.silverBright}},m.name),
-            h('div',{style:{fontSize:14,fontWeight:800,color:C.white}},m.cal+' kcal')
-          ),
-          h('div',{style:{display:'flex',gap:12}},
-            m.protein>0&&h('div',{style:{fontSize:11,color:C.blue}},m.protein+'g protein'),
-            m.carbs>0&&h('div',{style:{fontSize:11,color:C.warning}},m.carbs+'g carbs'),
-            m.fat>0&&h('div',{style:{fontSize:11,color:C.danger}},m.fat+'g fat'),
-            h('div',{style:{fontSize:11,color:C.silverDim,marginLeft:'auto'}},m.time)
-          )
-        ))
-      ),
-
-    h('div',{style:{background:`${C.blue}10`,border:`1px solid ${C.blue}30`,borderRadius:14,padding:16,display:'flex',gap:12}},
+    meals.length===0?h('div',{style:{background:C.navyLight,borderRadius:14,padding:24,textAlign:'center',border:'1px solid #2A3447'}},
+      h('div',{style:{fontSize:32,marginBottom:8}},'🥗'),
+      h('div',{style:{fontSize:14,color:C.silverDim}},'No meals logged yet.'),
+      h('div',{style:{fontSize:13,color:C.silverDim,marginTop:4}},'Snap a photo or add manually.')
+    ):h('div',{style:{display:'flex',flexDirection:'column',gap:10,marginBottom:16}},
+      meals.map((m,i)=>h('div',{key:i,style:{background:C.navyLight,borderRadius:14,padding:'14px 16px',border:'1px solid #2A3447'}},
+        h('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:6}},
+          h('div',{style:{fontSize:14,fontWeight:700,color:C.silverBright}},m.name),
+          h('div',{style:{fontSize:14,fontWeight:800,color:C.white}},m.cal+' kcal')
+        ),
+        h('div',{style:{display:'flex',gap:10}},
+          m.protein>0&&h('div',{style:{fontSize:11,color:C.blue}},m.protein+'g protein'),
+          m.carbs>0&&h('div',{style:{fontSize:11,color:C.warning}},m.carbs+'g carbs'),
+          m.fat>0&&h('div',{style:{fontSize:11,color:C.danger}},m.fat+'g fat'),
+          h('div',{style:{fontSize:11,color:C.silverDim,marginLeft:'auto'}},m.time)
+        )
+      ))
+    ),
+    h('div',{style:{background:'#3B82F610',border:'1px solid #3B82F630',borderRadius:14,padding:16,display:'flex',gap:12}},
       h(Avatar,{size:36}),
       h('div',{style:{fontSize:13,color:C.silver,lineHeight:1.6}},
-        meals.length===0?'"Log your meals. Snap a photo and I\'ll analyze the macros automatically."':
-        total.protein<100?'"Protein is low. Aim for at least 100g of protein daily to support muscle recovery."':
+        meals.length===0?'"Log your meals. Snap a photo and I will analyze the macros automatically."':
+        totals.protein<100?'"Protein is low. Aim for at least 100g daily to support muscle recovery."':
         '"Good work logging your meals. Keep protein high and carbs clean."'
       )
     ),
     h(BottomNav,{screen:S.NUTRITION,setScreen})
-  );
-}
-
-function LeaderboardScreen({setScreen}){
-  const users=[{rank:1,name:'JORDANFIT',streak:42,points:9840,phase:2},{rank:2,name:'TAYLORM',streak:38,points:8910,phase:2},{rank:3,name:'AISHAT',streak:12,points:2800,phase:1},{rank:4,name:'LISAKAY',streak:6,points:1420,phase:1},{rank:5,name:'DEVONR',streak:5,points:1200,phase:1}];
-  return h('div',{style:{minHeight:'100vh',background:C.navy,padding:'54px 24px 100px'}},
-    h('div',{style:{fontSize:11,color:C.blue,fontWeight:700,letterSpacing:2,marginBottom:4}},'COMMUNITY'),
-    h('div',{style:{fontSize:26,fontWeight:900,color:C.silverBright,marginBottom:4}},'Rankings'),
-    h('div',{style:{fontSize:13,color:C.silverDim,marginBottom:20}},'Top 5 win a free HBHM compression shirt 👕'),
-    h('div',{style:{background:'linear-gradient(135deg,#1C3A6B,#0D2040)',borderRadius:16,padding:'14px 20px',marginBottom:24,border:'1px solid #1D4ED850',display:'flex',justifyContent:'space-between',alignItems:'center'}},
-      h('div',null,h('div',{style:{fontSize:12,color:C.blue,fontWeight:700}},'MONTHLY PRIZE'),h('div',{style:{fontSize:16,fontWeight:800,color:C.white,marginTop:2}},'HBHM Compression Long Sleeve')),
-      h('div',{style:{fontSize:36}},'👕')
-    ),
-    h('div',{style:{display:'flex',flexDirection:'column',gap:10}},
-      users.map((u,i)=>h('div',{key:i,style:{background:C.navyLight,borderRadius:14,padding:'14px 16px',border:`1.5px solid ${C.border}`,display:'flex',alignItems:'center',gap:14}},
-        h('div',{style:{width:36,height:36,borderRadius:'50%',background:C.border,display:'flex',alignItems:'center',justifyContent:'center',fontSize:i<3?20:13,fontWeight:700,color:C.silverDim}},['🥇','🥈','🥉','4th','5th'][i]),
-        h('div',{style:{flex:1}},
-          h('div',{style:{fontSize:14,fontWeight:800,color:C.silverBright}},u.name),
-          h('div',{style:{fontSize:11,color:C.silverDim,marginTop:2}},`🔥${u.streak} · `,h(PhaseTag,{phase:u.phase}))
-        ),
-        h('div',{style:{textAlign:'right'}},h('div',{style:{fontSize:16,fontWeight:900,color:C.white}},u.points.toLocaleString()),h('div',{style:{fontSize:10,color:C.silverDim}},'pts'))
-      ))
-    ),
-    h(BottomNav,{screen:S.LEADERBOARD,setScreen})
-  );
-}
-
-function PaymentScreen({setScreen,user}){
-  const handlePayment=()=>{
-    window.location.href='https://buy.stripe.com/8x28wP6q96Td3NW8vl3Nm00';
-  };
-
-  useEffect(()=>{
-    const params=new URLSearchParams(window.location.search);
-    if(params.get('payment')==='success'){
-      window.history.replaceState({},'',window.location.pathname);
-      setScreen(S.DASH);
-    }
-  },[]);
-
-  return h('div',{style:{minHeight:'100vh',background:C.navy,padding:'60px 24px 40px'}},
-    h('div',{style:{fontSize:11,color:C.blue,fontWeight:700,letterSpacing:2,marginBottom:8}},'UNLOCK HBHM'),
-    h('div',{style:{fontSize:26,fontWeight:800,color:C.silverBright,marginBottom:6}},'Start your journey'),
-    h('div',{style:{fontSize:13,color:C.silverDim,marginBottom:28}},'$5/week. Cancel anytime. You only get one body.'),
-    h('div',{style:{background:'linear-gradient(135deg,#1C3A6B,#0D2040)',borderRadius:16,padding:20,marginBottom:28,border:'1px solid #1D4ED840',display:'flex',justifyContent:'space-between',alignItems:'center'}},
-      h('div',null,
-        h('div',{style:{fontSize:11,color:C.silverDim,letterSpacing:1}},'WEEKLY PLAN'),
-        h('div',{style:{fontSize:30,fontWeight:900,color:C.white}},'$5',h('span',{style:{fontSize:14,fontWeight:400,color:C.silverDim}},'/week')),
-        h('div',{style:{fontSize:12,color:C.silver,marginTop:2}},'Low risk. High reward.')
-      ),
-      h(Avatar,{size:60})
-    ),
-    h('div',{style:{display:'flex',flexDirection:'column',gap:12,marginBottom:28}},
-      ['✓ Coach Skelly AI coaching daily','✓ Personalized Phase 1-3 program','✓ Nutrition & body tracking','✓ Mind & wellness accountability','✓ Monthly leaderboard — win a shirt','✓ Cancel anytime'].map(item=>
-        h('div',{key:item,style:{display:'flex',alignItems:'center',gap:10,fontSize:14,color:C.silver}},item)
-      )
-    ),
-    h('button',{onClick:handlePayment,className:'btn',style:{width:'100%',padding:'16px 0',background:'linear-gradient(135deg,#1D4ED8,#3B82F6)',borderRadius:14,color:'#fff',fontSize:15,fontWeight:800}},'PAY $5/WEEK — START NOW'),
-    h('div',{style:{textAlign:'center',marginTop:12,fontSize:11,color:C.silverDim}},'🔒 Secured by Stripe · Cancel anytime'),
-    h('button',{onClick:()=>setScreen(S.DASH),className:'btn',style:{width:'100%',marginTop:12,padding:'12px 0',background:'transparent',border:`1px solid ${C.border}`,borderRadius:14,color:C.silverDim,fontSize:13}},'Skip for now (beta)')
   );
 }
 
@@ -609,64 +826,38 @@ function ProgressScreen({setScreen,user,profile,setProfile}){
   const [analyzing,setAnalyzing]=useState(false);
   const [result,setResult]=useState(null);
   const [error,setError]=useState('');
-  const [photos,setPhotos]=useState([]);
 
-  useEffect(()=>{if(user)loadPhotos();},[user]);
-
-  const loadPhotos=async()=>{
-    const{data}=await sb.from('profiles').select('body_score,body_feedback,last_photo_date').eq('id',user.id).single();
-    if(data?.body_score){setResult({score:data.body_score,feedback:data.body_feedback});}
-  };
+  useEffect(()=>{
+    if(profile?.body_score)setResult({score:profile.body_score,feedback:profile.body_feedback});
+  },[profile]);
 
   const handlePhoto=async(e)=>{
-    const file=e.target.files[0];
-    if(!file)return;
+    const file=e.target.files[0];if(!file)return;
     setUploading(true);setError('');setResult(null);
-
-    try{
-      // Upload to Supabase storage
-      const fileName=`${user.id}/${Date.now()}.jpg`;
-      const{error:uploadError}=await sb.storage.from('body-photos').upload(fileName,file);
-      if(uploadError)throw uploadError;
-
-      // Convert to base64 for AI analysis
-      const reader=new FileReader();
-      reader.onload=async(ev)=>{
-        const base64=ev.target.result.split(',')[1];
-        setUploading(false);setAnalyzing(true);
-
-        try{
-          const res=await fetch('https://api.anthropic.com/v1/messages',{
-            method:'POST',
-            headers:{'Content-Type':'application/json'},
-            body:JSON.stringify({
-              model:'claude-sonnet-4-6',
-              max_tokens:1000,
-              system:`You are Coach Skelly from HBHM fitness app. You analyze body photos and give honest, science-based feedback. Score the person's body out of 10 based on visible fitness, body composition, and posture. Be direct but constructive. Format your response as JSON only: {"score": 6.5, "overall": "Your honest overall assessment", "stomach": "assessment", "shoulders": "assessment", "chest": "assessment", "legs": "assessment", "advice": "what to focus on in Phase 1"}`,
-              messages:[{role:'user',content:[
-                {type:'image',source:{type:'base64',media_type:'image/jpeg',data:base64}},
-                {type:'text',text:'Analyze this body photo and give me an honest Coach Skelly assessment. Return JSON only.'}
-              ]}]
-            })
-          });
-          const data=await res.json();
-          const text=data.content?.[0]?.text||'{}';
-          const clean=text.replace(/```json|```/g,'').trim();
-          const parsed=JSON.parse(clean);
-          setResult(parsed);
-
-          // Save to profile
-          await sb.from('profiles').update({
-            body_score:parsed.score,
-            body_feedback:parsed.overall,
-            last_photo_date:new Date().toISOString().split('T')[0]
-          }).eq('id',user.id);
-          setProfile(p=>({...p,body_score:parsed.score}));
-        }catch(err){setError('Analysis failed. Try again.');}
-        setAnalyzing(false);
-      };
-      reader.readAsDataURL(file);
-    }catch(err){setError(err.message);setUploading(false);}
+    const reader=new FileReader();
+    reader.onload=async(ev)=>{
+      const base64=ev.target.result.split(',')[1];
+      setUploading(false);setAnalyzing(true);
+      try{
+        const res=await fetch('https://api.anthropic.com/v1/messages',{
+          method:'POST',
+          headers:{'Content-Type':'application/json','x-api-key':ANTHROPIC_KEY,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
+          body:JSON.stringify({
+            model:'claude-sonnet-4-6',max_tokens:800,
+            system:'You are Coach Skelly from HBHM fitness app. Analyze body photos honestly. Return JSON only: {"score":6.5,"overall":"honest overall","stomach":"assessment","shoulders":"assessment","chest":"assessment","legs":"assessment","advice":"what to focus on"}',
+            messages:[{role:'user',content:[{type:'image',source:{type:'base64',media_type:'image/jpeg',data:base64}},{type:'text',text:'Analyze this body photo. Return JSON only.'}]}]
+          })
+        });
+        const data=await res.json();
+        const text=data.content?.[0]?.text||'{}';
+        const parsed=JSON.parse(text.replace(/```json|```/g,'').trim());
+        setResult(parsed);
+        await sb.from('profiles').update({body_score:parsed.score,body_feedback:parsed.overall,last_photo_date:new Date().toISOString().split('T')[0]}).eq('id',user.id);
+        setProfile(p=>({...p,body_score:parsed.score,body_feedback:parsed.overall}));
+      }catch(e){setError('Analysis failed. Make sure your API key is configured.');}
+      setAnalyzing(false);
+    };
+    reader.readAsDataURL(file);
   };
 
   const lastDate=profile?.last_photo_date;
@@ -677,105 +868,140 @@ function ProgressScreen({setScreen,user,profile,setProfile}){
     h('div',{style:{fontSize:11,color:C.blue,fontWeight:700,letterSpacing:2,marginBottom:4}},'BODY PROGRESS'),
     h('div',{style:{fontSize:26,fontWeight:900,color:C.silverBright,marginBottom:4}},'Weekly Check-In'),
     h('div',{style:{fontSize:13,color:C.silverDim,marginBottom:24}},'Coach Skelly scores your body out of 10 every week'),
-
-    // Current score card
-    profile?.body_score&&h('div',{style:{background:'linear-gradient(135deg,#1C3A6B,#0D2040)',borderRadius:20,padding:24,marginBottom:20,border:`1px solid ${C.blue}40`,textAlign:'center'}},
+    profile?.body_score&&h('div',{style:{background:'linear-gradient(135deg,#1C3A6B,#0D2040)',borderRadius:20,padding:24,marginBottom:20,border:'1px solid #1D4ED850',textAlign:'center'}},
       h('div',{style:{fontSize:11,color:C.blue,fontWeight:700,letterSpacing:2,marginBottom:8}},'YOUR CURRENT SCORE'),
       h('div',{style:{fontSize:64,fontWeight:900,color:C.white,lineHeight:1}},profile.body_score),
-      h('div',{style:{fontSize:14,color:C.silverDim,marginTop:4}},'out of 10'),
-      lastDate&&h('div',{style:{fontSize:12,color:C.silverDim,marginTop:8}},'Last checked: '+new Date(lastDate).toLocaleDateString())
+      h('div',{style:{fontSize:14,color:C.silverDim,marginTop:4}},'out of 10')
     ),
-
-    // Result from latest analysis
-    result&&h('div',{style:{background:C.navyLight,borderRadius:16,padding:18,border:`1px solid ${C.border}`,marginBottom:20}},
-      h('div',{style:{display:'flex',gap:12,alignItems:'flex-start',marginBottom:16}},
+    result&&h('div',{style:{background:C.navyLight,borderRadius:16,padding:18,border:'1px solid #2A3447',marginBottom:20}},
+      h('div',{style:{display:'flex',gap:12,alignItems:'flex-start',marginBottom:14}},
         h(Avatar,{size:40}),
         h('div',null,
           h('div',{style:{fontSize:12,color:C.blue,fontWeight:700,letterSpacing:1,marginBottom:4}},"COACH SKELLY'S ANALYSIS"),
-          h('div',{style:{fontSize:14,fontWeight:900,color:C.white}},result.score+'/10'),
-          h('div',{style:{fontSize:13,color:C.silver,lineHeight:1.6,marginTop:4}},result.overall)
+          h('div',{style:{fontSize:16,fontWeight:900,color:C.white}},result.score+'/10'),
+          h('div',{style:{fontSize:13,color:C.silver,lineHeight:1.6,marginTop:4}},result.overall||result.feedback)
         )
       ),
       result.stomach&&h('div',{style:{display:'flex',flexDirection:'column',gap:8}},
-        ['stomach','shoulders','chest','legs'].map(part=>result[part]&&
-          h('div',{key:part,style:{background:C.navy,borderRadius:10,padding:'10px 14px'}},
-            h('div',{style:{fontSize:10,color:C.silverDim,fontWeight:700,letterSpacing:1,marginBottom:3}},part.toUpperCase()),
-            h('div',{style:{fontSize:13,color:C.silver}},result[part])
-          )
-        )
+        ['stomach','shoulders','chest','legs'].map(part=>result[part]&&h('div',{key:part,style:{background:C.navy,borderRadius:10,padding:'10px 14px'}},
+          h('div',{style:{fontSize:10,color:C.silverDim,fontWeight:700,letterSpacing:1,marginBottom:3}},part.toUpperCase()),
+          h('div',{style:{fontSize:13,color:C.silver}},result[part])
+        ))
       ),
-      result.advice&&h('div',{style:{background:`${C.success}10`,border:`1px solid ${C.success}30`,borderRadius:10,padding:14,marginTop:12}},
-        h('div',{style:{fontSize:11,color:C.success,fontWeight:700,marginBottom:4}},'COACH SKELLY SAYS'),
+      result.advice&&h('div',{style:{background:'#22C55E10',border:'1px solid #22C55E30',borderRadius:10,padding:14,marginTop:12}},
+        h('div',{style:{fontSize:11,color:C.success,fontWeight:700,marginBottom:4}},'FOCUS ON'),
         h('div',{style:{fontSize:13,color:C.silver,lineHeight:1.6}},result.advice)
       )
     ),
-
-    error&&h('div',{style:{background:`${C.danger}15`,border:`1px solid ${C.danger}40`,borderRadius:10,padding:12,marginBottom:16,fontSize:13,color:C.danger}},error),
-
-    // Upload section
-    canUpload?h('div',null,
-      h('label',{style:{display:'block',width:'100%',padding:'20px',background:analyzing||uploading?C.navyLight:'linear-gradient(135deg,#1D4ED8,#3B82F6)',borderRadius:14,cursor:'pointer',textAlign:'center',color:'#fff'}},
-        uploading?h('div',null,h('div',{style:{fontSize:20,marginBottom:8}},'⬆️'),h('div',{style:{fontSize:15,fontWeight:800}},'Uploading...')):
-        analyzing?h('div',null,h('div',{style:{fontSize:20,marginBottom:8}},'🔍'),h('div',{style:{fontSize:15,fontWeight:800}},'Coach Skelly is analyzing...')):
-        h('div',null,h('div',{style:{fontSize:32,marginBottom:8}},'📸'),h('div',{style:{fontSize:16,fontWeight:800}},'TAKE WEEKLY BODY PHOTO'),h('div',{style:{fontSize:12,marginTop:4,opacity:0.8}},'Coach Skelly will score your body out of 10')),
-        h('input',{type:'file',accept:'image/*',capture:'user',style:{display:'none'},onChange:handlePhoto,disabled:uploading||analyzing})
-      )
-    ):h('div',{style:{background:C.navyLight,borderRadius:14,padding:20,textAlign:'center',border:`1px solid ${C.border}`}},
+    error&&h('div',{style:{background:'#EF444415',border:'1px solid #EF444440',borderRadius:10,padding:12,marginBottom:16,fontSize:13,color:C.danger}},error),
+    canUpload?h('label',{style:{display:'block',width:'100%',padding:'24px',background:analyzing||uploading?C.navyLight:'linear-gradient(135deg,#1D4ED8,#3B82F6)',borderRadius:14,cursor:'pointer',textAlign:'center',color:'#fff',marginBottom:16}},
+      uploading?h('div',null,h('div',{style:{fontSize:20,marginBottom:8}},'⬆️'),h('div',{style:{fontSize:15,fontWeight:800}},'Uploading...')):
+      analyzing?h('div',null,h('div',{style:{fontSize:20,marginBottom:8}},'🔍'),h('div',{style:{fontSize:15,fontWeight:800}},'Coach Skelly is analyzing...')):
+      h('div',null,h('div',{style:{fontSize:36,marginBottom:8}},'📸'),h('div',{style:{fontSize:16,fontWeight:800}},'TAKE WEEKLY BODY PHOTO'),h('div',{style:{fontSize:12,marginTop:4,opacity:0.8}},'Coach Skelly will score your body out of 10')),
+      h('input',{type:'file',accept:'image/*',capture:'user',style:{display:'none'},onChange:handlePhoto,disabled:uploading||analyzing})
+    ):h('div',{style:{background:C.navyLight,borderRadius:14,padding:20,textAlign:'center',border:'1px solid #2A3447',marginBottom:16}},
       h('div',{style:{fontSize:32,marginBottom:8}},'⏰'),
       h('div',{style:{fontSize:14,fontWeight:700,color:C.silverBright}},'Next check-in in '+(7-daysSince)+' days'),
-      h('div',{style:{fontSize:12,color:C.silverDim,marginTop:4}},'Weekly photos keep Coach Skelly honest')
+      h('div',{style:{fontSize:12,color:C.silverDim,marginTop:4}},'Weekly photos keep progress honest')
     ),
-
-    h('div',{style:{marginTop:20,background:`${C.blue}10`,border:`1px solid ${C.blue}30`,borderRadius:14,padding:16,display:'flex',gap:12}},
+    h('div',{style:{background:'#3B82F610',border:'1px solid #3B82F630',borderRadius:14,padding:16,display:'flex',gap:12}},
       h(Avatar,{size:36}),
       h('div',{style:{fontSize:13,color:C.silver,lineHeight:1.6}},
-        profile?.body_score?
-        `"You're at a ${profile.body_score}/10. Keep hitting your non-negotiables and eating right. I want to see that number go up next week."`:
-        '"Submit your first body photo. I\'ll give you an honest assessment and we\'ll track your progress from there. No sugarcoating."'
+        profile?.body_score?'"You are at a '+profile.body_score+'/10. Keep hitting your non-negotiables and eating right."':'"Submit your first body photo. I will give you an honest assessment. No sugarcoating."'
       )
     ),
     h(BottomNav,{screen:S.PROGRESS,setScreen})
   );
 }
 
+function LeaderboardScreen({setScreen}){
+  const users=[
+    {rank:1,name:'JORDANFIT',streak:42,points:9840,phase:2},
+    {rank:2,name:'TAYLORM',streak:38,points:8910,phase:2},
+    {rank:3,name:'AISHAT',streak:12,points:2800,phase:1},
+    {rank:4,name:'LISAKAY',streak:6,points:1420,phase:1},
+    {rank:5,name:'DEVONR',streak:5,points:1200,phase:1}
+  ];
+  const medals=['🥇','🥈','🥉','4th','5th'];
+  return h('div',{style:{minHeight:'100vh',background:C.navy,padding:'54px 24px 100px'}},
+    h('div',{style:{fontSize:11,color:C.blue,fontWeight:700,letterSpacing:2,marginBottom:4}},'COMMUNITY'),
+    h('div',{style:{fontSize:26,fontWeight:900,color:C.silverBright,marginBottom:4}},'Rankings'),
+    h('div',{style:{fontSize:13,color:C.silverDim,marginBottom:20}},'Top 5 win a free HBHM compression shirt 👕'),
+    h('div',{style:{background:'linear-gradient(135deg,#1C3A6B,#0D2040)',borderRadius:16,padding:'14px 20px',marginBottom:24,border:'1px solid #1D4ED850',display:'flex',justifyContent:'space-between',alignItems:'center'}},
+      h('div',null,
+        h('div',{style:{fontSize:12,color:C.blue,fontWeight:700}},'MONTHLY PRIZE'),
+        h('div',{style:{fontSize:16,fontWeight:800,color:C.white,marginTop:2}},'HBHM Compression Long Sleeve')
+      ),
+      h('div',{style:{fontSize:36}},'👕')
+    ),
+    h('div',{style:{display:'flex',flexDirection:'column',gap:10}},
+      users.map((u,i)=>h('div',{key:i,style:{background:C.navyLight,borderRadius:14,padding:'14px 16px',border:'1.5px solid #2A3447',display:'flex',alignItems:'center',gap:14}},
+        h('div',{style:{width:36,height:36,borderRadius:'50%',background:C.border,display:'flex',alignItems:'center',justifyContent:'center',fontSize:i<3?20:13,fontWeight:700}},medals[i]),
+        h('div',{style:{flex:1}},
+          h('div',{style:{fontSize:14,fontWeight:800,color:C.silverBright}},u.name),
+          h('div',{style:{fontSize:11,color:C.silverDim,marginTop:2}},'Streak: '+u.streak+' days')
+        ),
+        h('div',{style:{textAlign:'right'}},
+          h('div',{style:{fontSize:16,fontWeight:900,color:C.white}},u.points.toLocaleString()),
+          h('div',{style:{fontSize:10,color:C.silverDim}},'pts')
+        )
+      ))
+    ),
+    h(BottomNav,{screen:S.LEADERBOARD,setScreen})
+  );
+}
+
 function App(){
   const [screen,setScreen]=useState(S.LOADING);
   const [user,setUser]=useState(null);
-  const [profile,setProfile]=useState(null);  const [ex,setEx]=useState(null);
+  const [profile,setProfile]=useState(null);
+  const [ex,setEx]=useState(null);
+
+  const loadProfile=async(id)=>{
+    const{data}=await sb.from('profiles').select('*').eq('id',id).maybeSingle();
+    if(data)setProfile(data);
+    return data;
+  };
 
   useEffect(()=>{
-    sb.auth.getSession().then(({data:{session}})=>{
-      if(session?.user){setUser(session.user);loadProfile(session.user.id);setScreen(S.DASH);}
-      else setScreen(S.AUTH);
+    sb.auth.getSession().then(async({data:{session}})=>{
+      if(session?.user){
+        setUser(session.user);
+        await loadProfile(session.user.id);
+        setScreen(S.DASH);
+      } else {
+        setScreen(S.AUTH);
+      }
     });
-    const{data:{subscription}}=sb.auth.onAuthStateChange((_,session)=>{
-      if(session?.user){setUser(session.user);loadProfile(session.user.id);}
+    const{data:{subscription}}=sb.auth.onAuthStateChange(async(_,session)=>{
+      if(session?.user){setUser(session.user);await loadProfile(session.user.id);}
       else{setUser(null);setProfile(null);}
     });
     return()=>subscription.unsubscribe();
   },[]);
 
-  const loadProfile=async(id)=>{const{data}=await sb.from('profiles').select('*').eq('id',id).single();if(data)setProfile(data);};
-
   const render=()=>{
     switch(screen){
-      case S.LOADING:return h('div',{style:{minHeight:'100vh',background:C.navy,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',gap:20}},h(Logo,{size:80,animate:true}),h('div',{style:{fontSize:11,color:C.silverDim,letterSpacing:3}},'LOADING...'));
+      case S.LOADING:return h('div',{style:{minHeight:'100vh',background:C.navy,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',gap:20}},
+        h(Logo,{size:80,animate:true}),
+        h('div',{style:{fontSize:11,color:C.silverDim,letterSpacing:3}},'LOADING...')
+      );
       case S.AUTH:return h(AuthScreen,{setScreen,setUser});
       case S.WELCOME:return h(WelcomeScreen,{setScreen});
-      case S.ON1:case S.ON2:case S.ONBODY:case S.ON3:return h('div',{style:{minHeight:'100vh',background:C.navy,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',padding:32,gap:24}},h(Logo,{size:80,animate:true}),h('button',{onClick:()=>setScreen(S.PAYMENT),className:'btn',style:{padding:'16px 40px',background:'linear-gradient(135deg,#1D4ED8,#3B82F6)',borderRadius:14,color:'#fff',fontSize:15,fontWeight:800}},'CONTINUE →'));
-      case S.PAYMENT:return h(PaymentScreen,{setScreen,user});
+      case S.ONBOARDING:return h(OnboardingFlow,{setScreen,user,setProfile});
+      case S.PAYMENT:return h(PaymentScreen,{setScreen});
       case S.DASH:return h(DashScreen,{setScreen,user,profile,setProfile});
       case S.WORKOUT:return h(WorkoutScreen,{setScreen,setEx});
       case S.EXERCISE:return h(ExerciseScreen,{setScreen,exercise:ex});
       case S.COACH:return h(CoachScreen,{setScreen});
       case S.NUTRITION:return h(NutritionScreen,{setScreen,user});
-      case S.LEADERBOARD:return h(LeaderboardScreen,{setScreen});
       case S.PROGRESS:return h(ProgressScreen,{setScreen,user,profile,setProfile});
+      case S.LEADERBOARD:return h(LeaderboardScreen,{setScreen});
       default:return null;
     }
   };
 
-  return h('div',{style:{maxWidth:430,margin:'0 auto',minHeight:'100vh',background:C.navy,fontFamily:"'Inter',-apple-system,sans-serif"}},render());
+  return h('div',{style:{maxWidth:430,margin:'0 auto',minHeight:'100vh',background:C.navy}},render());
 }
 
 ReactDOM.createRoot(document.getElementById('root')).render(h(App,null));
