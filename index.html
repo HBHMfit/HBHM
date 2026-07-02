@@ -28,7 +28,8 @@ const sb = createClient(
   'https://dxpurntcbiplzjhpdisp.supabase.co',
   'sb_publishable_yuJxW-ukJ4evDAiRhDBrGQ_pJtG9X0W'
 );
-const ANTHROPIC_KEY = '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';
+const SB_URL = 'https://dxpurntcbiplzjhpdisp.supabase.co';
+const SB_ANON = 'sb_publishable_yuJxW-ukJ4evDAiRhDBrGQ_pJtG9X0W';
 
 const C={
   navy:'#0D1117',navyMid:'#141B26',navyLight:'#1C2535',
@@ -122,7 +123,8 @@ function BottomNav({screen,setScreen}){
     {id:S.WORKOUT,icon:'💪',label:'Workout'},
     {id:S.COACH,icon:'💀',label:'Coach'},
     {id:S.NUTRITION,icon:'🥗',label:'Nutrition'},
-    {id:S.PROGRESS,icon:'📸',label:'Progress'}
+    {id:S.PROGRESS,icon:'📸',label:'Progress'},
+    {id:S.LEADERBOARD,icon:'🏆',label:'Ranks'}
   ];
   return h('div',{style:{position:'fixed',bottom:0,left:'50%',transform:'translateX(-50%)',width:'100%',maxWidth:430,background:C.navy,borderTop:'1px solid #1C2535',display:'flex',justifyContent:'space-around',padding:'10px 0 22px',zIndex:100}},
     tabs.map(t=>h('button',{key:t.id,onClick:()=>setScreen(t.id),className:'btn',style:{background:'none',display:'flex',flexDirection:'column',alignItems:'center',gap:3,color:screen===t.id?C.blue:C.silverDim}},
@@ -632,19 +634,14 @@ function CoachScreen({setScreen}){
     const msg=input.trim();setInput('');
     setMsgs(m=>[...m,{role:'user',text:msg}]);setLoading(true);
     try{
-      const res=await fetch('https://api.anthropic.com/v1/messages',{
+      const history=msgs.map(m=>({role:m.role==='coach'?'assistant':'user',content:m.text}));
+      const res=await fetch(SB_URL+'/functions/v1/coach-skelly',{
         method:'POST',
-        headers:{'Content-Type':'application/json','x-api-key':ANTHROPIC_KEY,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
-        body:JSON.stringify({
-          model:'claude-sonnet-4-6',
-          max_tokens:1000,
-          system:"You are Coach Skelly, AI fitness coach for HBHM app. You are direct, science-backed, and accept zero excuses. You know the three phases: Phase 1 Restore (fix body, mobility, Pilates, flexibility, bodyweight - 30 days), Phase 2 Condition (hard running, explosive, military style - 8-12 weeks), Phase 3 Strengthen (brute strength, gym lifting - 12 weeks). Everyone starts Phase 1. Daily non-negotiables scale in tiers. Weekly body photo scoring. $5/week subscription. Keep responses to 3-5 sentences. Be direct and motivating.",
-          messages:[...msgs.map(m=>({role:m.role==='coach'?'assistant':'user',content:m.text})),{role:'user',content:msg}]
-        })
+        headers:{'Content-Type':'application/json','Authorization':'Bearer '+SB_ANON,'apikey':SB_ANON},
+        body:JSON.stringify({message:msg,history})
       });
       const data=await res.json();
-      const text=data.content?.[0]?.text;
-      setMsgs(m=>[...m,{role:'coach',text:text||'Stay focused. No excuses.'}]);
+      setMsgs(m=>[...m,{role:'coach',text:data.reply||'Stay focused. No excuses.'}]);
     }catch(e){
       setMsgs(m=>[...m,{role:'coach',text:'Connection issue. Keep grinding - no excuses on the workout.'}]);
     }
@@ -1008,3 +1005,4 @@ ReactDOM.createRoot(document.getElementById('root')).render(h(App,null));
 </script>
 </body>
 </html>
+      
