@@ -635,7 +635,7 @@ function CoachScreen({setScreen}){
     setMsgs(m=>[...m,{role:'user',text:msg}]);setLoading(true);
     try{
       const history=msgs.map(m=>({role:m.role==='coach'?'assistant':'user',content:m.text}));
-      const res=await fetch(SB_URL+'/functions/v1/coach-skelly',{
+      const res=await fetch(SB_URL+'/functions/v1/Coach-Skelly',{
         method:'POST',
         headers:{'Content-Type':'application/json','Authorization':'Bearer '+SB_ANON,'apikey':SB_ANON},
         body:JSON.stringify({message:msg,history})
@@ -912,14 +912,17 @@ function ProgressScreen({setScreen,user,profile,setProfile}){
 }
 
 function LeaderboardScreen({setScreen}){
-  const users=[
-    {rank:1,name:'JORDANFIT',streak:42,points:9840,phase:2},
-    {rank:2,name:'TAYLORM',streak:38,points:8910,phase:2},
-    {rank:3,name:'AISHAT',streak:12,points:2800,phase:1},
-    {rank:4,name:'LISAKAY',streak:6,points:1420,phase:1},
-    {rank:5,name:'DEVONR',streak:5,points:1200,phase:1}
-  ];
-  const medals=['🥇','🥈','🥉','4th','5th'];
+  const [users,setUsers]=useState([]);
+  const [loading,setLoading]=useState(true);
+
+  useEffect(()=>{
+    sb.from('profiles').select('full_name,points,streak,phase').order('points',{ascending:false}).limit(20).then(({data})=>{
+      setUsers(data||[]);
+      setLoading(false);
+    });
+  },[]);
+
+  const medals=['🥇','🥈','🥉'];
   return h('div',{style:{minHeight:'100vh',background:C.navy,padding:'54px 24px 100px'}},
     h('div',{style:{fontSize:11,color:C.blue,fontWeight:700,letterSpacing:2,marginBottom:4}},'COMMUNITY'),
     h('div',{style:{fontSize:26,fontWeight:900,color:C.silverBright,marginBottom:4}},'Rankings'),
@@ -931,15 +934,19 @@ function LeaderboardScreen({setScreen}){
       ),
       h('div',{style:{fontSize:36}},'👕')
     ),
-    h('div',{style:{display:'flex',flexDirection:'column',gap:10}},
+    loading?h('div',{style:{textAlign:'center',color:C.silverDim,padding:20}},'Loading...'):
+    users.length===0?h('div',{style:{background:C.navyLight,borderRadius:14,padding:24,textAlign:'center',border:'1px solid #2A3447'}},
+      h('div',{style:{fontSize:32,marginBottom:8}},'🏆'),
+      h('div',{style:{fontSize:14,color:C.silverDim}},'No rankings yet. Be the first to log a streak.')
+    ):h('div',{style:{display:'flex',flexDirection:'column',gap:10}},
       users.map((u,i)=>h('div',{key:i,style:{background:C.navyLight,borderRadius:14,padding:'14px 16px',border:'1.5px solid #2A3447',display:'flex',alignItems:'center',gap:14}},
-        h('div',{style:{width:36,height:36,borderRadius:'50%',background:C.border,display:'flex',alignItems:'center',justifyContent:'center',fontSize:i<3?20:13,fontWeight:700}},medals[i]),
+        h('div',{style:{width:36,height:36,borderRadius:'50%',background:C.border,display:'flex',alignItems:'center',justifyContent:'center',fontSize:i<3?20:13,fontWeight:700,flexShrink:0}},medals[i]||(i+1)+'th'),
         h('div',{style:{flex:1}},
-          h('div',{style:{fontSize:14,fontWeight:800,color:C.silverBright}},u.name),
-          h('div',{style:{fontSize:11,color:C.silverDim,marginTop:2}},'Streak: '+u.streak+' days')
+          h('div',{style:{fontSize:14,fontWeight:800,color:C.silverBright}},u.full_name||'Athlete'),
+          h('div',{style:{fontSize:11,color:C.silverDim,marginTop:2}},'Streak: '+(u.streak||0)+' days')
         ),
         h('div',{style:{textAlign:'right'}},
-          h('div',{style:{fontSize:16,fontWeight:900,color:C.white}},u.points.toLocaleString()),
+          h('div',{style:{fontSize:16,fontWeight:900,color:C.white}},(u.points||0).toLocaleString()),
           h('div',{style:{fontSize:10,color:C.silverDim}},'pts')
         )
       ))
@@ -988,7 +995,7 @@ function App(){
       case S.ONBOARDING:return h(OnboardingFlow,{setScreen,user,setProfile});
       case S.PAYMENT:return h(PaymentScreen,{setScreen});
       case S.DASH:return h(DashScreen,{setScreen,user,profile,setProfile});
-      case S.WORKOUT:return h(WorkoutScreen,{setScreen,setEx});
+      case S.WORKOUT:return h(WorkoutScreen,{setScreen,setEx,profile});
       case S.EXERCISE:return h(ExerciseScreen,{setScreen,exercise:ex});
       case S.COACH:return h(CoachScreen,{setScreen});
       case S.NUTRITION:return h(NutritionScreen,{setScreen,user});
@@ -1005,4 +1012,3 @@ ReactDOM.createRoot(document.getElementById('root')).render(h(App,null));
 </script>
 </body>
 </html>
-      
