@@ -438,8 +438,11 @@ function DashScreen({setScreen,user,profile,setProfile}){
     }else{
       await sb.from('daily_logs').insert({user_id:user.id,date:today,nonneg_completed:newChecked});
     }
-    const np=Math.max(0,(profile?.points||0)+pointsDelta);
-    let ns=profile?.streak||0;
+    const{data:freshProfile}=await sb.from('profiles').select('points,streak').eq('id',user.id).maybeSingle();
+    const basePoints=freshProfile?.points??(profile?.points||0);
+    const baseStreak=freshProfile?.streak??(profile?.streak||0);
+    const np=Math.max(0,basePoints+pointsDelta);
+    let ns=baseStreak;
     if(!allBefore&&allAfter)ns=ns+1;
     if(allBefore&&!allAfter)ns=Math.max(0,ns-1);
     await sb.from('profiles').update({points:np,streak:ns,last_active:today}).eq('id',user.id);
@@ -606,7 +609,9 @@ function WorkoutScreen({setScreen,setEx,profile,user,setProfile}){
     savePicks(picks,pickReason,newCompleted);
     if(user){
       const delta=wasDone?-5:5;
-      const np=Math.max(0,(profile?.points||0)+delta);
+      const{data:freshProfile}=await sb.from('profiles').select('points').eq('id',user.id).maybeSingle();
+      const basePoints=freshProfile?.points??(profile?.points||0);
+      const np=Math.max(0,basePoints+delta);
       await sb.from('profiles').update({points:np}).eq('id',user.id);
       setProfile(p=>({...p,points:np}));
     }
