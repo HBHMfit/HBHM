@@ -38,6 +38,11 @@ const C={
   success:'#22C55E',warning:'#F59E0B',danger:'#EF4444'
 };
 
+function getLocalDate(){
+  const d=new Date();
+  return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+}
+
 const S={
   LOADING:'loading',AUTH:'auth',WELCOME:'welcome',
   ONBOARDING:'onboarding',PAYMENT:'payment',
@@ -412,14 +417,38 @@ function DashScreen({setScreen,user,profile,setProfile}){
   const NONNEG=NONNEG_TIERS[tier]||NONNEG_TIERS[1];
   const [checked,setChecked]=useState({});
   const [saving,setSaving]=useState(false);
-  const today=new Date().toISOString().split('T')[0];
+  const today=getLocalDate();
 
   useEffect(()=>{
     if(!user)return;
     sb.from('daily_logs').select('nonneg_completed').eq('user_id',user.id).eq('date',today).maybeSingle().then(({data})=>{
       if(data?.nonneg_completed)setChecked(data.nonneg_completed);
     });
+    applyMissedPenalty();
   },[user]);
+
+  const applyMissedPenalty=async()=>{
+    const y=new Date();y.setDate(y.getDate()-1);
+    const yDate=y.getFullYear()+'-'+String(y.getMonth()+1).padStart(2,'0')+'-'+String(y.getDate()).padStart(2,'0');
+    const{data:yLog}=await sb.from('daily_logs').select('id,nonneg_completed,penalty_applied').eq('user_id',user.id).eq('date',yDate).maybeSingle();
+    if(yLog&&yLog.penalty_applied)return;
+    const doneY=yLog?.nonneg_completed?Object.values(yLog.nonneg_completed).filter(Boolean).length:0;
+    const missed=NONNEG.length-doneY;
+    if(missed<=0){
+      if(yLog)await sb.from('daily_logs').update({penalty_applied:true}).eq('id',yLog.id);
+      return;
+    }
+    const{data:freshProfile}=await sb.from('profiles').select('points').eq('id',user.id).maybeSingle();
+    const basePoints=freshProfile?.points??(profile?.points||0);
+    const np=Math.max(0,basePoints-(missed*5));
+    await sb.from('profiles').update({points:np}).eq('id',user.id);
+    setProfile(p=>({...p,points:np}));
+    if(yLog){
+      await sb.from('daily_logs').update({penalty_applied:true}).eq('id',yLog.id);
+    }else{
+      await sb.from('daily_logs').insert({user_id:user.id,date:yDate,nonneg_completed:{},penalty_applied:true});
+    }
+  };
 
   const toggle=async(id)=>{
     const wasChecked=!!checked[id];
@@ -544,7 +573,7 @@ function WorkoutScreen({setScreen,setEx,profile,user,setProfile}){
   const PHASE1_TYPES=['Stretch','Pilates','Conditioning'];
   const phase1Workouts=WORKOUTS.filter(w=>PHASE1_TYPES.includes(w.type));
   const filtered=filter==='All'?phase1Workouts:phase1Workouts.filter(w=>w.type===filter);
-  const today=new Date().toISOString().split('T')[0];
+  const today=getLocalDate();
 
   useEffect(()=>{
     if(!user){setPicksLoaded(true);return;}
@@ -698,6 +727,15 @@ function ExerciseScreen({setScreen,exercise,user,profile,setProfile}){
     h('button',{onClick:()=>setScreen(S.WORKOUT),className:'btn',style:{background:'none',color:C.blue,fontSize:13,fontWeight:700,marginBottom:20,padding:0}},'Back to Library'),
     h('div',{style:{fontSize:11,color:col,fontWeight:700,letterSpacing:2,marginBottom:6}},exercise.type.toUpperCase()),
     h('div',{style:{fontSize:26,fontWeight:900,color:C.silverBright,marginBottom:4}},exercise.name),
+    h('div',{style:{background:C.navyLight,borderRadius:16,padding:16,border:'1px solid #2A3447',marginBottom:12,display:'flex',gap:12}},
+      h(Avatar,{size:44,animate:started}),
+      h('div',{style:{flex:1}},
+        h('div',{style:{fontSize:11,color:C.blue,fontWeight:700,letterSpacing:1,marginBottom:4}},'COACH SKELLY'),
+        h('div',{style:{fontSize:13,color:C.silver,lineHeight:1.6}},
+          started?"You're doing it. Keep your form tight - "+exercise.tip:"Alright, let's go. "+exercise.tip+" Hit start when you're ready."
+        )
+      )
+    ),
     h('div',{style:{fontSize:13,color:C.silverDim,marginBottom:20}},exercise.sets),
     h('div',{style:{background:C.navyLight,borderRadius:16,padding:18,border:'1px solid #2A3447',marginBottom:12}},
       h('div',{style:{fontSize:11,color:C.blue,fontWeight:700,letterSpacing:1.5,marginBottom:14}},'MUSCLES WORKED'),
@@ -833,21 +871,56 @@ function CoachScreen({setScreen,user}){
   );
 }
 
-function NutritionScreen({setScreen,user}){
+function NutritionScreen({setScreen,user,profile,setProfile}){
   const [meals,setMeals]=useState([]);
   const [loading,setLoading]=useState(true);
   const [adding,setAdding]=useState(false);
   const [analyzing,setAnalyzing]=useState(false);
   const [form,setForm]=useState({name:'',cal:'',protein:'',carbs:'',fat:''});
-  const today=new Date().toISOString().split('T')[0];
+  const [reviewing,setReviewing]=useState(false);
+  const [reviewResult,setReviewResult]=useState(null);
+  const [alreadyReviewed,setAlreadyReviewed]=useState(false);
+  const today=getLocalDate();
 
   useEffect(()=>{if(user)load();},[user]);
 
   const load=async()=>{
     setLoading(true);
-    const{data}=await sb.from('daily_logs').select('meals,id').eq('user_id',user.id).eq('date',today).maybeSingle();
+    const{data}=await sb.from('daily_logs').select('meals,id,food_reviewed').eq('user_id',user.id).eq('date',today).maybeSingle();
     if(data?.meals)setMeals(data.meals);
+    if(data?.food_reviewed)setAlreadyReviewed(true);
     setLoading(false);
+  };
+
+  const askSkellyToReview=async()=>{
+    if(meals.length===0||alreadyReviewed)return;
+    setReviewing(true);
+    const mealList=meals.map(m=>m.name+' ('+m.cal+' kcal, '+m.protein+'g protein)').join(', ');
+    const msg='Here is everything I ate today: '+mealList+'. Was this a healthy day overall for someone in Phase 1 restore training? Respond with ONLY JSON: {"healthy":true,"feedback":"one short sentence"}';
+    try{
+      const res=await fetch(SB_URL+'/functions/v1/Coach-Skelly',{
+        method:'POST',
+        headers:{'Content-Type':'application/json','Authorization':'Bearer '+SB_ANON,'apikey':SB_ANON},
+        body:JSON.stringify({message:msg})
+      });
+      const data=await res.json();
+      const text=(data.reply||'{}').replace(/```json|```/g,'').trim();
+      const parsed=JSON.parse(text);
+      setReviewResult(parsed);
+      if(parsed.healthy){
+        const{data:freshProfile}=await sb.from('profiles').select('points').eq('id',user.id).maybeSingle();
+        const basePoints=freshProfile?.points??(profile?.points||0);
+        const np=basePoints+5;
+        await sb.from('profiles').update({points:np}).eq('id',user.id);
+        setProfile(p=>({...p,points:np}));
+      }
+      const{data:existing}=await sb.from('daily_logs').select('id').eq('user_id',user.id).eq('date',today).maybeSingle();
+      if(existing)await sb.from('daily_logs').update({food_reviewed:true}).eq('id',existing.id);
+      setAlreadyReviewed(true);
+    }catch(e){
+      setReviewResult({healthy:false,feedback:"Couldn't reach Skelly. Try again later."});
+    }
+    setReviewing(false);
   };
 
   const save=async(newMeals)=>{
@@ -863,17 +936,13 @@ function NutritionScreen({setScreen,user}){
     reader.onload=async(ev)=>{
       const base64=ev.target.result.split(',')[1];
       try{
-        const res=await fetch('https://api.anthropic.com/v1/messages',{
+        const res=await fetch(SB_URL+'/functions/v1/rapid-handler',{
           method:'POST',
-          headers:{'Content-Type':'application/json','x-api-key':ANTHROPIC_KEY,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
-          body:JSON.stringify({
-            model:'claude-sonnet-4-6',max_tokens:300,
-            system:'Analyze food photos and return JSON only. Format: {"name":"meal name","calories":450,"protein":35,"carbs":40,"fat":12}. Be realistic.',
-            messages:[{role:'user',content:[{type:'image',source:{type:'base64',media_type:'image/jpeg',data:base64}},{type:'text',text:'Analyze this food. Return JSON only.'}]}]
-          })
+          headers:{'Content-Type':'application/json','Authorization':'Bearer '+SB_ANON,'apikey':SB_ANON},
+          body:JSON.stringify({type:'food',image:base64,mediaType:'image/jpeg'})
         });
         const data=await res.json();
-        const text=data.content?.[0]?.text||'{}';
+        const text=data.reply||'{}';
         const parsed=JSON.parse(text.replace(/```json|```/g,'').trim());
         setForm({name:parsed.name||'',cal:String(parsed.calories||''),protein:String(parsed.protein||''),carbs:String(parsed.carbs||''),fat:String(parsed.fat||'')});
         setAdding(true);
@@ -960,6 +1029,14 @@ function NutritionScreen({setScreen,user}){
         )
       ))
     ),
+    meals.length>0&&!alreadyReviewed&&h('button',{onClick:askSkellyToReview,disabled:reviewing,className:'btn',style:{width:'100%',marginBottom:16,padding:'14px 0',background:reviewing?C.navyLight:'linear-gradient(135deg,#1D4ED8,#3B82F6)',borderRadius:14,color:'#fff',fontSize:14,fontWeight:800}},reviewing?'Skelly is reviewing...':"💀 ASK SKELLY TO REVIEW MY DAY"),
+    reviewResult&&h('div',{style:{background:reviewResult.healthy?'#22C55E15':'#F59E0B15',border:'1px solid '+(reviewResult.healthy?'#22C55E40':'#F59E0B40'),borderRadius:14,padding:16,marginBottom:16,display:'flex',gap:12}},
+      h('div',{style:{fontSize:24}},reviewResult.healthy?'✅':'🤔'),
+      h('div',null,
+        h('div',{style:{fontSize:13,fontWeight:800,color:reviewResult.healthy?C.success:C.warning}},reviewResult.healthy?'Solid day. +5 points':'Room to improve'),
+        h('div',{style:{fontSize:12,color:C.silver,marginTop:2}},reviewResult.feedback)
+      )
+    ),
     h('div',{style:{background:'#3B82F610',border:'1px solid #3B82F630',borderRadius:14,padding:16,display:'flex',gap:12}},
       h(Avatar,{size:36}),
       h('div',{style:{fontSize:13,color:C.silver,lineHeight:1.6}},
@@ -977,6 +1054,7 @@ function ProgressScreen({setScreen,user,profile,setProfile}){
   const [analyzing,setAnalyzing]=useState(false);
   const [result,setResult]=useState(null);
   const [error,setError]=useState('');
+  const [improvementBonus,setImprovementBonus]=useState(false);
 
   useEffect(()=>{
     if(profile?.body_score)setResult({score:profile.body_score,feedback:profile.body_feedback});
@@ -990,22 +1068,24 @@ function ProgressScreen({setScreen,user,profile,setProfile}){
       const base64=ev.target.result.split(',')[1];
       setUploading(false);setAnalyzing(true);
       try{
-        const res=await fetch('https://api.anthropic.com/v1/messages',{
+        const res=await fetch(SB_URL+'/functions/v1/rapid-handler',{
           method:'POST',
-          headers:{'Content-Type':'application/json','x-api-key':ANTHROPIC_KEY,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
-          body:JSON.stringify({
-            model:'claude-sonnet-4-6',max_tokens:800,
-            system:'You are Coach Skelly from HBHM fitness app. Analyze body photos honestly. Return JSON only: {"score":6.5,"overall":"honest overall","stomach":"assessment","shoulders":"assessment","chest":"assessment","legs":"assessment","advice":"what to focus on"}',
-            messages:[{role:'user',content:[{type:'image',source:{type:'base64',media_type:'image/jpeg',data:base64}},{type:'text',text:'Analyze this body photo. Return JSON only.'}]}]
-          })
+          headers:{'Content-Type':'application/json','Authorization':'Bearer '+SB_ANON,'apikey':SB_ANON},
+          body:JSON.stringify({type:'body',image:base64,mediaType:'image/jpeg'})
         });
         const data=await res.json();
-        const text=data.content?.[0]?.text||'{}';
+        const text=data.reply||'{}';
         const parsed=JSON.parse(text.replace(/```json|```/g,'').trim());
         setResult(parsed);
-        await sb.from('profiles').update({body_score:parsed.score,body_feedback:parsed.overall,last_photo_date:new Date().toISOString().split('T')[0]}).eq('id',user.id);
-        setProfile(p=>({...p,body_score:parsed.score,body_feedback:parsed.overall}));
-      }catch(e){setError('Analysis failed. Make sure your API key is configured.');}
+        const prevScore=profile?.body_score;
+        let pointsBonus=0;
+        let bonusEarned=false;
+        if(prevScore!=null&&parsed.score>prevScore){pointsBonus=10;bonusEarned=true;}
+        const np=(profile?.points||0)+pointsBonus;
+        await sb.from('profiles').update({body_score:parsed.score,body_feedback:parsed.overall,last_photo_date:getLocalDate(),points:np}).eq('id',user.id);
+        setProfile(p=>({...p,body_score:parsed.score,body_feedback:parsed.overall,points:np}));
+        setImprovementBonus(bonusEarned);
+      }catch(e){setError('Analysis failed. Try again in a moment.');}
       setAnalyzing(false);
     };
     reader.readAsDataURL(file);
@@ -1023,6 +1103,13 @@ function ProgressScreen({setScreen,user,profile,setProfile}){
       h('div',{style:{fontSize:11,color:C.blue,fontWeight:700,letterSpacing:2,marginBottom:8}},'YOUR CURRENT SCORE'),
       h('div',{style:{fontSize:64,fontWeight:900,color:C.white,lineHeight:1}},profile.body_score),
       h('div',{style:{fontSize:14,color:C.silverDim,marginTop:4}},'out of 10')
+    ),
+    improvementBonus&&h('div',{style:{background:'#22C55E15',border:'1px solid #22C55E40',borderRadius:14,padding:'14px 16px',marginBottom:16,display:'flex',gap:12,alignItems:'center'}},
+      h('div',{style:{fontSize:24}},'📈'),
+      h('div',null,
+        h('div',{style:{fontSize:13,fontWeight:800,color:C.success}},'Score improved! +10 points'),
+        h('div',{style:{fontSize:12,color:C.silverDim}},'Keep it up.')
+      )
     ),
     result&&h('div',{style:{background:C.navyLight,borderRadius:16,padding:18,border:'1px solid #2A3447',marginBottom:20}},
       h('div',{style:{display:'flex',gap:12,alignItems:'flex-start',marginBottom:14}},
@@ -1164,7 +1251,7 @@ function App(){
       case S.WORKOUT:return h(WorkoutScreen,{setScreen,setEx,profile,user,setProfile});
       case S.EXERCISE:return h(ExerciseScreen,{setScreen,exercise:ex,user,profile,setProfile});
       case S.COACH:return h(CoachScreen,{setScreen,user});
-      case S.NUTRITION:return h(NutritionScreen,{setScreen,user});
+      case S.NUTRITION:return h(NutritionScreen,{setScreen,user,profile,setProfile});
       case S.PROGRESS:return h(ProgressScreen,{setScreen,user,profile,setProfile});
       case S.LEADERBOARD:return h(LeaderboardScreen,{setScreen,profile});
       default:return null;
