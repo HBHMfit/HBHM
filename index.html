@@ -1050,50 +1050,65 @@ function NutritionScreen({setScreen,user,profile,setProfile}){
 }
 
 function ProgressScreen({setScreen,user,profile,setProfile}){
-  const [uploading,setUploading]=useState(false);
+  const [photos,setPhotos]=useState({front:null,side:null,back:null,legs:null});
+  const [weight,setWeight]=useState('');
   const [analyzing,setAnalyzing]=useState(false);
   const [result,setResult]=useState(null);
   const [error,setError]=useState('');
   const [improvementBonus,setImprovementBonus]=useState(false);
+  const ANGLES=[{id:'front',label:'Front',icon:'🧍'},{id:'side',label:'Side',icon:'🚶'},{id:'back',label:'Back',icon:'🔙'},{id:'legs',label:'Legs',icon:'🦵'}];
 
   useEffect(()=>{
     if(profile?.body_score)setResult({score:profile.body_score,feedback:profile.body_feedback});
   },[profile]);
 
-  const handlePhoto=async(e)=>{
+  const capturePhoto=(angleId)=>(e)=>{
     const file=e.target.files[0];if(!file)return;
-    setUploading(true);setError('');setResult(null);
     const reader=new FileReader();
-    reader.onload=async(ev)=>{
+    reader.onload=(ev)=>{
       const base64=ev.target.result.split(',')[1];
-      setUploading(false);setAnalyzing(true);
-      try{
-        const res=await fetch(SB_URL+'/functions/v1/rapid-handler',{
-          method:'POST',
-          headers:{'Content-Type':'application/json','Authorization':'Bearer '+SB_ANON,'apikey':SB_ANON},
-          body:JSON.stringify({type:'body',image:base64,mediaType:'image/jpeg'})
-        });
-        const data=await res.json();
-        const text=data.reply||'{}';
-        const parsed=JSON.parse(text.replace(/```json|```/g,'').trim());
-        setResult(parsed);
-        const prevScore=profile?.body_score;
-        let pointsBonus=0;
-        let bonusEarned=false;
-        if(prevScore!=null&&parsed.score>prevScore){pointsBonus=10;bonusEarned=true;}
-        const np=(profile?.points||0)+pointsBonus;
-        await sb.from('profiles').update({body_score:parsed.score,body_feedback:parsed.overall,last_photo_date:getLocalDate(),points:np}).eq('id',user.id);
-        setProfile(p=>({...p,body_score:parsed.score,body_feedback:parsed.overall,points:np}));
-        setImprovementBonus(bonusEarned);
-      }catch(e){setError('Analysis failed. Try again in a moment.');}
-      setAnalyzing(false);
+      setPhotos(p=>({...p,[angleId]:base64}));
     };
     reader.readAsDataURL(file);
   };
 
+  const readyCount=Object.values(photos).filter(Boolean).length;
+  const canAnalyze=readyCount>0&&weight.trim()!=='';
+
+  const analyzeAll=async()=>{
+    if(!canAnalyze)return;
+    setAnalyzing(true);setError('');setResult(null);
+    try{
+      const images=Object.values(photos).filter(Boolean);
+      const res=await fetch(SB_URL+'/functions/v1/rapid-handler',{
+        method:'POST',
+        headers:{'Content-Type':'application/json','Authorization':'Bearer '+SB_ANON,'apikey':SB_ANON},
+        body:JSON.stringify({type:'body',images,mediaType:'image/jpeg'})
+      });
+      const data=await res.json();
+      const text=data.reply||'{}';
+      const parsed=JSON.parse(text.replace(/```json|```/g,'').trim());
+      setResult(parsed);
+      const prevScore=profile?.body_score;
+      let pointsBonus=0;
+      let bonusEarned=false;
+      if(prevScore!=null&&parsed.score>prevScore){pointsBonus=10;bonusEarned=true;}
+      const np=(profile?.points||0)+pointsBonus;
+      await sb.from('profiles').update({body_score:parsed.score,body_feedback:parsed.overall,last_photo_date:getLocalDate(),points:np,weight:weight.trim()}).eq('id',user.id);
+      setProfile(p=>({...p,body_score:parsed.score,body_feedback:parsed.overall,points:np,weight:weight.trim()}));
+      setImprovementBonus(bonusEarned);
+      setPhotos({front:null,side:null,back:null,legs:null});
+      setWeight('');
+    }catch(e){setError('Analysis failed. Try again in a moment.');}
+    setAnalyzing(false);
+  };
+
   const lastDate=profile?.last_photo_date;
   const daysSince=lastDate?Math.floor((new Date()-new Date(lastDate))/(1000*60*60*24)):null;
-  const canUpload=!lastDate||daysSince>=7;
+  const dayOfWeek=new Date().getDay();
+  const isSunday=dayOfWeek===0;
+  const overdue=lastDate?daysSince>7:true;
+  const canUpload=isSunday||overdue;
 
   return h('div',{style:{minHeight:'100vh',background:C.navy,padding:'54px 24px 100px'}},
     h('div',{style:{fontSize:11,color:C.blue,fontWeight:700,letterSpacing:2,marginBottom:4}},'BODY PROGRESS'),
@@ -1132,20 +1147,31 @@ function ProgressScreen({setScreen,user,profile,setProfile}){
       )
     ),
     error&&h('div',{style:{background:'#EF444415',border:'1px solid #EF444440',borderRadius:10,padding:12,marginBottom:16,fontSize:13,color:C.danger}},error),
-    canUpload?h('label',{style:{display:'block',width:'100%',padding:'24px',background:analyzing||uploading?C.navyLight:'linear-gradient(135deg,#1D4ED8,#3B82F6)',borderRadius:14,cursor:'pointer',textAlign:'center',color:'#fff',marginBottom:16}},
-      uploading?h('div',null,h('div',{style:{fontSize:20,marginBottom:8}},'⬆️'),h('div',{style:{fontSize:15,fontWeight:800}},'Uploading...')):
-      analyzing?h('div',null,h('div',{style:{fontSize:20,marginBottom:8}},'🔍'),h('div',{style:{fontSize:15,fontWeight:800}},'Coach Skelly is analyzing...')):
-      h('div',null,h('div',{style:{fontSize:36,marginBottom:8}},'📸'),h('div',{style:{fontSize:16,fontWeight:800}},'TAKE WEEKLY BODY PHOTO'),h('div',{style:{fontSize:12,marginTop:4,opacity:0.8}},'Coach Skelly will score your body out of 10')),
-      h('input',{type:'file',accept:'image/*',capture:'user',style:{display:'none'},onChange:handlePhoto,disabled:uploading||analyzing})
+    canUpload?h('div',{style:{marginBottom:16}},
+      h('div',{style:{background:'#F59E0B10',border:'1px solid #F59E0B30',borderRadius:12,padding:'10px 14px',marginBottom:14,fontSize:12,color:C.warning,fontWeight:600}},isSunday?'📅 Sunday check-in - mandatory':'⏰ Overdue - catch up now'),
+      h('div',{style:{fontSize:12,color:C.silverDim,fontWeight:700,letterSpacing:1,marginBottom:6}},'YOUR CURRENT WEIGHT (lbs)'),
+      h('input',{value:weight,onChange:e=>setWeight(e.target.value),placeholder:'e.g. 178',type:'number',style:{width:'100%',padding:'12px 14px',borderRadius:10,fontSize:15,background:C.navyLight,border:'1.5px solid #2A3447',color:C.silverBright,outline:'none',boxSizing:'border-box',marginBottom:14}}),
+      h('div',{style:{fontSize:12,color:C.silverDim,fontWeight:700,letterSpacing:1,marginBottom:10}},'CAPTURE YOUR ANGLES ('+readyCount+'/4)'),
+      h('div',{style:{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginBottom:14}},
+        ANGLES.map(a=>h('label',{key:a.id,style:{display:'block',padding:'18px 10px',background:photos[a.id]?'#22C55E15':C.navyLight,border:'1.5px solid '+(photos[a.id]?'#22C55E60':C.border),borderRadius:14,cursor:'pointer',textAlign:'center'}},
+          h('div',{style:{fontSize:28,marginBottom:6}},photos[a.id]?'✅':a.icon),
+          h('div',{style:{fontSize:12,fontWeight:700,color:photos[a.id]?C.success:C.silver}},a.label),
+          h('input',{type:'file',accept:'image/*',capture:'user',style:{display:'none'},onChange:capturePhoto(a.id),disabled:analyzing})
+        ))
+      ),
+      h('button',{onClick:analyzeAll,disabled:!canAnalyze||analyzing,className:'btn',style:{width:'100%',padding:'16px 0',background:!canAnalyze?C.border:(analyzing?C.navyLight:'linear-gradient(135deg,#1D4ED8,#3B82F6)'),borderRadius:14,color:!canAnalyze?C.silverDim:'#fff',fontSize:15,fontWeight:800}},
+        analyzing?'🔍 Coach Skelly is analyzing...':'ANALYZE MY PROGRESS ('+readyCount+' photo'+(readyCount===1?'':'s')+')'
+      ),
+      h('div',{style:{fontSize:11,color:C.silverDim,marginTop:8,textAlign:'center'}},readyCount===0?'Add at least one angle to continue.':(weight.trim()===''?'Enter your weight to continue.':'More angles = better feedback.'))
     ):h('div',{style:{background:C.navyLight,borderRadius:14,padding:20,textAlign:'center',border:'1px solid #2A3447',marginBottom:16}},
       h('div',{style:{fontSize:32,marginBottom:8}},'⏰'),
-      h('div',{style:{fontSize:14,fontWeight:700,color:C.silverBright}},'Next check-in in '+(7-daysSince)+' days'),
-      h('div',{style:{fontSize:12,color:C.silverDim,marginTop:4}},'Weekly photos keep progress honest')
+      h('div',{style:{fontSize:14,fontWeight:700,color:C.silverBright}},'Next check-in: Sunday'),
+      h('div',{style:{fontSize:12,color:C.silverDim,marginTop:4}},'Weekly photo + weight, every Sunday night')
     ),
     h('div',{style:{background:'#3B82F610',border:'1px solid #3B82F630',borderRadius:14,padding:16,display:'flex',gap:12}},
       h(Avatar,{size:36}),
       h('div',{style:{fontSize:13,color:C.silver,lineHeight:1.6}},
-        profile?.body_score?'"You are at a '+profile.body_score+'/10. Keep hitting your non-negotiables and eating right."':'"Submit your first body photo. I will give you an honest assessment. No sugarcoating."'
+        profile?.body_score?'"You are at a '+profile.body_score+'/10. Keep hitting your non-negotiables and eating right."':'"Submit your first body photos. I will give you an honest assessment. No sugarcoating."'
       )
     ),
     h(BottomNav,{screen:S.PROGRESS,setScreen})
