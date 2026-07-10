@@ -417,36 +417,70 @@ function DashScreen({setScreen,user,profile,setProfile}){
   const NONNEG=NONNEG_TIERS[tier]||NONNEG_TIERS[1];
   const [checked,setChecked]=useState({});
   const [saving,setSaving]=useState(false);
-  const today=getLocalDate();
+  const [today,setToday]=useState(getLocalDate());
+
+  useEffect(()=>{
+    const id=setInterval(()=>{
+      const nowDate=getLocalDate();
+      if(nowDate!==today){
+        setToday(nowDate);
+        setChecked({});
+      }
+    },30000);
+    return ()=>clearInterval(id);
+  },[today]);
 
   useEffect(()=>{
     if(!user)return;
     sb.from('daily_logs').select('nonneg_completed').eq('user_id',user.id).eq('date',today).maybeSingle().then(({data})=>{
-      if(data?.nonneg_completed)setChecked(data.nonneg_completed);
+      setChecked(data?.nonneg_completed||{});
     });
-    applyMissedPenalty();
-  },[user]);
+    applyDailyPenalties();
+  },[user,today]);
 
-  const applyMissedPenalty=async()=>{
+  const applyDailyPenalties=async()=>{
     const y=new Date();y.setDate(y.getDate()-1);
     const yDate=y.getFullYear()+'-'+String(y.getMonth()+1).padStart(2,'0')+'-'+String(y.getDate()).padStart(2,'0');
-    const{data:yLog}=await sb.from('daily_logs').select('id,nonneg_completed,penalty_applied').eq('user_id',user.id).eq('date',yDate).maybeSingle();
-    if(yLog&&yLog.penalty_applied)return;
-    const doneY=yLog?.nonneg_completed?Object.values(yLog.nonneg_completed).filter(Boolean).length:0;
-    const missed=NONNEG.length-doneY;
-    if(missed<=0){
-      if(yLog)await sb.from('daily_logs').update({penalty_applied:true}).eq('id',yLog.id);
-      return;
+    const{data:yLog}=await sb.from('daily_logs').select('id,nonneg_completed,penalty_applied,workout_picks,workout_picks_completed,workout_penalty_applied,meals,nutrition_penalty_applied').eq('user_id',user.id).eq('date',yDate).maybeSingle();
+
+    let totalPenalty=0;
+    const updates={};
+
+    if(!(yLog&&yLog.penalty_applied)){
+      const doneY=yLog?.nonneg_completed?Object.values(yLog.nonneg_completed).filter(Boolean).length:0;
+      const missed=NONNEG.length-doneY;
+      if(missed>0)totalPenalty+=missed*5;
+      updates.penalty_applied=true;
     }
-    const{data:freshProfile}=await sb.from('profiles').select('points').eq('id',user.id).maybeSingle();
-    const basePoints=freshProfile?.points??(profile?.points||0);
-    const np=Math.max(0,basePoints-(missed*5));
-    await sb.from('profiles').update({points:np}).eq('id',user.id);
-    setProfile(p=>({...p,points:np}));
-    if(yLog){
-      await sb.from('daily_logs').update({penalty_applied:true}).eq('id',yLog.id);
-    }else{
-      await sb.from('daily_logs').insert({user_id:user.id,date:yDate,nonneg_completed:{},penalty_applied:true});
+
+    if(!(yLog&&yLog.workout_penalty_applied)){
+      const picks=yLog?.workout_picks||[];
+      const completedMap=yLog?.workout_picks_completed||{};
+      const missedWorkouts=picks.filter(name=>!completedMap[name]).length;
+      if(missedWorkouts>0)totalPenalty+=missedWorkouts*5;
+      updates.workout_penalty_applied=true;
+    }
+
+    if(!(yLog&&yLog.nutrition_penalty_applied)){
+      const hadMeals=yLog?.meals&&yLog.meals.length>0;
+      if(!hadMeals)totalPenalty+=5;
+      updates.nutrition_penalty_applied=true;
+    }
+
+    if(totalPenalty>0){
+      const{data:freshProfile}=await sb.from('profiles').select('points').eq('id',user.id).maybeSingle();
+      const basePoints=freshProfile?.points??(profile?.points||0);
+      const np=Math.max(0,basePoints-totalPenalty);
+      await sb.from('profiles').update({points:np}).eq('id',user.id);
+      setProfile(p=>({...p,points:np}));
+    }
+
+    if(Object.keys(updates).length>0){
+      if(yLog){
+        await sb.from('daily_logs').update(updates).eq('id',yLog.id);
+      }else{
+        await sb.from('daily_logs').insert({user_id:user.id,date:yDate,nonneg_completed:{},...updates});
+      }
     }
   };
 
@@ -559,56 +593,67 @@ function DashScreen({setScreen,user,profile,setProfile}){
 
 function WorkoutScreen({setScreen,setEx,profile,user,setProfile}){
   const [filter,setFilter]=useState('All');
-  const [asking,setAsking]=useState(false);
+  const [buildingWeek,setBuildingWeek]=useState(false);
   const [priority,setPriority]=useState('');
   const [painToday,setPainToday]=useState('');
-  const [loadingPicks,setLoadingPicks]=useState(false);
-  const [picks,setPicks]=useState(null);
-  const [pickReason,setPickReason]=useState('');
-  const [completed,setCompleted]=useState({});
-  const [picksLoaded,setPicksLoaded]=useState(false);
+  const [loadingPlan,setLoadingPlan]=useState(false);
+  const [selectedDay,setSelectedDay]=useState(null);
+  const [todayCompleted,setTodayCompleted]=useState({});
   const types=['All','Stretch','Pilates','Conditioning','Strength'];
   const colors={Stretch:C.success,Pilates:'#A855F7',Flexibility:'#06B6D4',Conditioning:C.warning,Strength:C.blue};
   const icons={Stretch:'🤸',Pilates:'🧘',Flexibility:'🌊',Conditioning:'⚡',Strength:'💪'};
   const PHASE1_TYPES=['Stretch','Pilates','Conditioning'];
   const phase1Workouts=WORKOUTS.filter(w=>PHASE1_TYPES.includes(w.type));
   const filtered=filter==='All'?phase1Workouts:phase1Workouts.filter(w=>w.type===filter);
-  const today=getLocalDate();
+
+  const DAY_KEYS=['mon','tue','wed','thu','fri','sat','sun'];
+  const DAY_LABELS={mon:'Mon',tue:'Tue',wed:'Wed',thu:'Thu',fri:'Fri',sat:'Sat',sun:'Sun'};
+
+  const getMonday=()=>{
+    const d=new Date();
+    const day=d.getDay();
+    const diff=day===0?-6:1-day;
+    const monday=new Date(d);
+    monday.setDate(d.getDate()+diff);
+    return monday.getFullYear()+'-'+String(monday.getMonth()+1).padStart(2,'0')+'-'+String(monday.getDate()).padStart(2,'0');
+  };
+  const thisMonday=getMonday();
+  const todayKey=DAY_KEYS[(new Date().getDay()+6)%7];
+
+  const hasPlan=profile?.weekly_plan_week_start===thisMonday&&profile?.weekly_plan;
+  const weekPlan=hasPlan?profile.weekly_plan:null;
 
   useEffect(()=>{
-    if(!user){setPicksLoaded(true);return;}
-    sb.from('daily_logs').select('workout_picks,workout_pick_reason,workout_picks_completed').eq('user_id',user.id).eq('date',today).maybeSingle().then(({data})=>{
-      if(data?.workout_picks&&data.workout_picks.length>0){
-        const matched=data.workout_picks.map(name=>WORKOUTS.find(w=>w.name===name)).filter(Boolean);
-        setPicks(matched);
-        setPickReason(data.workout_pick_reason||'');
-        setCompleted(data.workout_picks_completed||{});
+    setSelectedDay(todayKey);
+  },[]);
+
+  useEffect(()=>{
+    if(!user||!hasPlan)return;
+    const today=getLocalDate();
+    const todayPicks=(weekPlan[todayKey]?.picks)||[];
+    sb.from('daily_logs').select('id,workout_picks,workout_picks_completed').eq('user_id',user.id).eq('date',today).maybeSingle().then(({data})=>{
+      if(data){
+        if(!data.workout_picks||data.workout_picks.length===0){
+          sb.from('daily_logs').update({workout_picks:todayPicks}).eq('id',data.id);
+        }
+        setTodayCompleted(data.workout_picks_completed||{});
+      }else{
+        sb.from('daily_logs').insert({user_id:user.id,date:today,workout_picks:todayPicks,workout_picks_completed:{}});
+        setTodayCompleted({});
       }
-      setPicksLoaded(true);
     });
-  },[user]);
+  },[user,hasPlan]);
 
-  const savePicks=async(newPicks,reason,newCompleted)=>{
-    if(!user)return;
-    const{data:existing}=await sb.from('daily_logs').select('id').eq('user_id',user.id).eq('date',today).maybeSingle();
-    const payload={workout_picks:newPicks.map(w=>w.name),workout_pick_reason:reason,workout_picks_completed:newCompleted};
-    if(existing){
-      await sb.from('daily_logs').update(payload).eq('id',existing.id);
-    }else{
-      await sb.from('daily_logs').insert({user_id:user.id,date:today,...payload});
-    }
-  };
-
-  const askSkelly=async()=>{
-    setLoadingPicks(true);setPicks(null);
+  const buildWeek=async()=>{
+    setLoadingPlan(true);
     const list=phase1Workouts.map(w=>w.name+' ('+w.type+')').join(', ');
     const painAreas=(profile?.pain_areas||[]).join(', ')||'none listed';
-    const msg='Pick exactly 10 exercises for today from this list only: '+list+
-      '. Distribution required: 3 Stretch, 4 Pilates, 3 Conditioning.'+
+    const msg='Build a 7-day workout plan (Monday through Sunday) using ONLY exercises from this list: '+list+
+      '. Each day needs exactly 10 exercises: 3 Stretch, 4 Pilates, 3 Conditioning. You may reuse exercises across different days.'+
       ' My known pain areas: '+painAreas+
-      '. What I want to prioritize today: '+(priority||'not specified')+
-      '. Any pain or injuries today: '+(painToday||'none')+
-      '. Respond with ONLY JSON, no other text: {"picks":["Exact Name 1","Exact Name 2"],"reason":"one short sentence why"}';
+      '. What I want to prioritize this week: '+(priority||'not specified')+
+      '. Any current pain or injuries: '+(painToday||'none')+
+      '. Respond with ONLY JSON, no other text, in this exact shape: {"mon":{"picks":["Exact Name",...],"reason":"short sentence"},"tue":{...},"wed":{...},"thu":{...},"fri":{...},"sat":{...},"sun":{...}}';
     try{
       const res=await fetch(SB_URL+'/functions/v1/Coach-Skelly',{
         method:'POST',
@@ -618,24 +663,22 @@ function WorkoutScreen({setScreen,setEx,profile,user,setProfile}){
       const data=await res.json();
       const text=(data.reply||'{}').replace(/```json|```/g,'').trim();
       const parsed=JSON.parse(text);
-      const matched=(parsed.picks||[]).map(name=>WORKOUTS.find(w=>w.name===name)).filter(Boolean);
-      const reason=parsed.reason||'';
-      setPicks(matched);
-      setPickReason(reason);
-      setCompleted({});
-      savePicks(matched,reason,{});
+      await sb.from('profiles').update({weekly_plan:parsed,weekly_plan_week_start:thisMonday}).eq('id',user.id);
+      setProfile(p=>({...p,weekly_plan:parsed,weekly_plan_week_start:thisMonday}));
+      setBuildingWeek(false);
     }catch(e){
-      setPicks([]);
-      setPickReason("Couldn't reach Skelly. Try again in a bit.");
+      alert("Couldn't build your week. Try again.");
     }
-    setLoadingPicks(false);
+    setLoadingPlan(false);
   };
 
-  const toggleComplete=async(name)=>{
-    const wasDone=!!completed[name];
-    const newCompleted={...completed,[name]:!wasDone};
-    setCompleted(newCompleted);
-    savePicks(picks,pickReason,newCompleted);
+  const toggleTodayComplete=async(name)=>{
+    const wasDone=!!todayCompleted[name];
+    const newCompleted={...todayCompleted,[name]:!wasDone};
+    setTodayCompleted(newCompleted);
+    const today=getLocalDate();
+    const{data:existing}=await sb.from('daily_logs').select('id').eq('user_id',user.id).eq('date',today).maybeSingle();
+    if(existing)await sb.from('daily_logs').update({workout_picks_completed:newCompleted}).eq('id',existing.id);
     if(user){
       const delta=wasDone?-5:5;
       const{data:freshProfile}=await sb.from('profiles').select('points').eq('id',user.id).maybeSingle();
@@ -646,36 +689,46 @@ function WorkoutScreen({setScreen,setEx,profile,user,setProfile}){
     }
   };
 
+  const selectedPlan=hasPlan&&selectedDay?weekPlan[selectedDay]:null;
+  const isToday=selectedDay===todayKey;
+
   return h('div',{style:{minHeight:'100vh',background:C.navy,paddingBottom:100}},
     h('div',{style:{padding:'54px 24px 16px',background:'linear-gradient(180deg,#141B26,#0D1117)'}},
       h('div',{style:{fontSize:11,color:C.blue,fontWeight:700,letterSpacing:2,marginBottom:4}},'PHASE 1'),
-      h('div',{style:{fontSize:26,fontWeight:900,color:C.silverBright}},'Workout Library'),
-      h('div',{style:{fontSize:13,color:C.silverDim,marginTop:4}},phase1Workouts.length+' exercises - Restore phase')
+      h('div',{style:{fontSize:26,fontWeight:900,color:C.silverBright}},'Your Week'),
+      h('div',{style:{fontSize:13,color:C.silverDim,marginTop:4}},hasPlan?'Plan set for this week':'No plan yet for this week')
     ),
     h('div',{style:{padding:'16px 24px 0'}},
-      !asking&&!picks&&h('button',{onClick:()=>setAsking(true),className:'btn',style:{width:'100%',padding:'16px',background:'linear-gradient(135deg,#1D4ED8,#3B82F6)',borderRadius:14,color:'#fff',fontSize:14,fontWeight:800,display:'flex',alignItems:'center',gap:10,justifyContent:'center'}},'💀 ASK SKELLY FOR TODAY\'S WORKOUT'),
-      asking&&!picks&&h('div',{style:{background:C.navyLight,borderRadius:14,padding:16,border:'1px solid #3B82F640'}},
+      !hasPlan&&!buildingWeek&&h('button',{onClick:()=>setBuildingWeek(true),className:'btn',style:{width:'100%',padding:'16px',background:'linear-gradient(135deg,#1D4ED8,#3B82F6)',borderRadius:14,color:'#fff',fontSize:14,fontWeight:800}},'💀 ASK SKELLY TO BUILD MY WEEK'),
+      buildingWeek&&h('div',{style:{background:C.navyLight,borderRadius:14,padding:16,border:'1px solid #3B82F640',marginBottom:14}},
         h('div',{style:{fontSize:12,color:C.blue,fontWeight:700,marginBottom:10}},'COACH SKELLY WANTS TO KNOW'),
-        h('div',{style:{fontSize:11,color:C.silverDim,marginBottom:6,fontWeight:600}},'WHAT ARE YOU PRIORITIZING TODAY?'),
+        h('div',{style:{fontSize:11,color:C.silverDim,marginBottom:6,fontWeight:600}},'WHAT DO YOU WANT TO PRIORITIZE THIS WEEK?'),
         h('input',{value:priority,onChange:e=>setPriority(e.target.value),placeholder:'e.g. loosening my hips',style:{width:'100%',padding:'12px 14px',borderRadius:10,fontSize:14,background:C.navy,border:'1.5px solid #2A3447',color:C.silverBright,outline:'none',boxSizing:'border-box',marginBottom:10}}),
-        h('div',{style:{fontSize:11,color:C.silverDim,marginBottom:6,fontWeight:600}},'ANY PAIN OR INJURIES TODAY?'),
+        h('div',{style:{fontSize:11,color:C.silverDim,marginBottom:6,fontWeight:600}},'ANY CURRENT PAIN OR INJURIES?'),
         h('input',{value:painToday,onChange:e=>setPainToday(e.target.value),placeholder:'e.g. tight lower back',style:{width:'100%',padding:'12px 14px',borderRadius:10,fontSize:14,background:C.navy,border:'1.5px solid #2A3447',color:C.silverBright,outline:'none',boxSizing:'border-box',marginBottom:12}}),
         h('div',{style:{display:'flex',gap:10}},
-          h('button',{onClick:askSkelly,disabled:loadingPicks,className:'btn',style:{flex:1,padding:'12px 0',background:'linear-gradient(135deg,#1D4ED8,#3B82F6)',borderRadius:10,color:'#fff',fontSize:14,fontWeight:700,opacity:loadingPicks?0.7:1}},loadingPicks?'Thinking...':'GET MY WORKOUT'),
-          h('button',{onClick:()=>setAsking(false),className:'btn',style:{padding:'12px 16px',background:C.border,borderRadius:10,color:C.silverDim,fontSize:14}},'Cancel')
+          h('button',{onClick:buildWeek,disabled:loadingPlan,className:'btn',style:{flex:1,padding:'12px 0',background:'linear-gradient(135deg,#1D4ED8,#3B82F6)',borderRadius:10,color:'#fff',fontSize:14,fontWeight:700,opacity:loadingPlan?0.7:1}},loadingPlan?'Building your week...':'BUILD MY WEEK'),
+          h('button',{onClick:()=>setBuildingWeek(false),className:'btn',style:{padding:'12px 16px',background:C.border,borderRadius:10,color:C.silverDim,fontSize:14}},'Cancel')
         )
       ),
-      picks&&h('div',{style:{background:'#3B82F610',border:'1px solid #3B82F630',borderRadius:14,padding:16,marginBottom:4}},
+      hasPlan&&h('div',{style:{display:'flex',gap:6,marginBottom:14,overflowX:'auto'}},
+        DAY_KEYS.map(dk=>h('button',{key:dk,onClick:()=>setSelectedDay(dk),className:'btn',style:{padding:'10px 14px',borderRadius:12,fontSize:12,fontWeight:800,flexShrink:0,background:selectedDay===dk?'linear-gradient(135deg,#1D4ED8,#3B82F6)':C.navyLight,color:selectedDay===dk?'#fff':(dk===todayKey?C.blue:C.silverDim),border:'1px solid '+(dk===todayKey?C.blue:'#2A3447')}},DAY_LABELS[dk]+(dk===todayKey?' •':''))
+        )
+      ),
+      hasPlan&&selectedPlan&&h('div',{style:{background:'#3B82F610',border:'1px solid #3B82F630',borderRadius:14,padding:16,marginBottom:16}},
         h('div',{style:{display:'flex',gap:10,marginBottom:10}},
           h(Avatar,{size:32}),
-          h('div',{style:{fontSize:13,color:C.silver,lineHeight:1.5,flex:1}},pickReason||"Here's today's picks.")
+          h('div',{style:{fontSize:13,color:C.silver,lineHeight:1.5,flex:1}},selectedPlan.reason||'')
         ),
-        picks.length>0&&h('div',{style:{fontSize:11,color:C.silverDim,fontWeight:700,marginBottom:8}},Object.values(completed).filter(Boolean).length+' / '+picks.length+' done today'),
-        picks.length>0&&h('div',{style:{display:'flex',flexDirection:'column',gap:8}},
-          picks.map(w=>{
-            const done=!!completed[w.name];
-            return h('div',{key:w.id,style:{background:done?'#22C55E12':C.navyLight,borderRadius:12,padding:'10px 14px',border:'1px solid '+(done?'#22C55E60':'#2A3447'),display:'flex',alignItems:'center',gap:10,width:'100%'}},
-              h('button',{onClick:()=>toggleComplete(w.name),className:'btn',style:{width:26,height:26,borderRadius:'50%',flexShrink:0,background:done?C.success:C.border,display:'flex',alignItems:'center',justifyContent:'center',fontSize:12,color:'#fff',fontWeight:800}},done?'✓':''),
+        isToday&&selectedPlan.picks?.length>0&&h('div',{style:{fontSize:11,color:C.silverDim,fontWeight:700,marginBottom:8}},Object.values(todayCompleted).filter(Boolean).length+' / '+selectedPlan.picks.length+' done today'),
+        !isToday&&h('div',{style:{fontSize:11,color:C.silverDim,fontWeight:700,marginBottom:8}},'Preview - unlocks on its day'),
+        h('div',{style:{display:'flex',flexDirection:'column',gap:8}},
+          (selectedPlan.picks||[]).map(name=>{
+            const w=WORKOUTS.find(x=>x.name===name);
+            if(!w)return null;
+            const done=isToday&&!!todayCompleted[name];
+            return h('div',{key:name,style:{background:done?'#22C55E12':C.navyLight,borderRadius:12,padding:'10px 14px',border:'1px solid '+(done?'#22C55E60':'#2A3447'),display:'flex',alignItems:'center',gap:10,width:'100%'}},
+              isToday&&h('button',{onClick:()=>toggleTodayComplete(name),className:'btn',style:{width:26,height:26,borderRadius:'50%',flexShrink:0,background:done?C.success:C.border,display:'flex',alignItems:'center',justifyContent:'center',fontSize:12,color:'#fff',fontWeight:800}},done?'✓':''),
               h('button',{onClick:()=>{setEx(w);setScreen(S.EXERCISE);},className:'btn',style:{flex:1,background:'transparent',display:'flex',alignItems:'center',gap:10,textAlign:'left',padding:0}},
                 h('span',{style:{fontSize:16}},icons[w.type]||'💪'),
                 h('div',{style:{flex:1,fontSize:13,fontWeight:700,color:done?C.silverDim:C.silverBright,textDecoration:done?'line-through':'none'}},w.name),
@@ -684,7 +737,7 @@ function WorkoutScreen({setScreen,setEx,profile,user,setProfile}){
             );
           })
         ),
-        h('button',{onClick:()=>{setPicks(null);setAsking(false);},className:'btn',style:{width:'100%',marginTop:10,padding:'10px 0',background:'transparent',border:'1px solid #2A3447',borderRadius:10,color:C.silverDim,fontSize:12}},'Ask again')
+        isToday&&h('button',{onClick:()=>setBuildingWeek(true),className:'btn',style:{width:'100%',marginTop:10,padding:'10px 0',background:'transparent',border:'1px solid #2A3447',borderRadius:10,color:C.silverDim,fontSize:12}},'Rebuild this week')
       )
     ),
     h('div',{style:{padding:'16px 24px 8px',overflowX:'auto'}},
@@ -693,6 +746,7 @@ function WorkoutScreen({setScreen,setEx,profile,user,setProfile}){
       )
     ),
     h('div',{style:{padding:'0 24px'}},
+      h('div',{style:{fontSize:12,color:C.silverDim,fontWeight:700,letterSpacing:1,marginBottom:10}},'FULL LIBRARY'),
       h('div',{style:{display:'flex',flexDirection:'column',gap:10}},
         filtered.map(w=>h('button',{key:w.id,onClick:()=>{setEx(w);setScreen(S.EXERCISE);},className:'btn',style:{background:C.navyLight,borderRadius:14,padding:'14px 16px',border:'1px solid #2A3447',textAlign:'left',display:'flex',alignItems:'center',gap:14,width:'100%'}},
           h('div',{style:{width:44,height:44,borderRadius:12,flexShrink:0,background:(colors[w.type]||C.blue)+'20',border:'1px solid '+(colors[w.type]||C.blue)+'40',display:'flex',alignItems:'center',justifyContent:'center',fontSize:20}},icons[w.type]||'💪'),
@@ -880,15 +934,28 @@ function NutritionScreen({setScreen,user,profile,setProfile}){
   const [reviewing,setReviewing]=useState(false);
   const [reviewResult,setReviewResult]=useState(null);
   const [alreadyReviewed,setAlreadyReviewed]=useState(false);
-  const today=getLocalDate();
+  const [today,setToday]=useState(getLocalDate());
 
-  useEffect(()=>{if(user)load();},[user]);
+  useEffect(()=>{
+    const id=setInterval(()=>{
+      const nowDate=getLocalDate();
+      if(nowDate!==today){
+        setToday(nowDate);
+        setMeals([]);
+        setAlreadyReviewed(false);
+        setReviewResult(null);
+      }
+    },30000);
+    return ()=>clearInterval(id);
+  },[today]);
+
+  useEffect(()=>{if(user)load();},[user,today]);
 
   const load=async()=>{
     setLoading(true);
     const{data}=await sb.from('daily_logs').select('meals,id,food_reviewed').eq('user_id',user.id).eq('date',today).maybeSingle();
-    if(data?.meals)setMeals(data.meals);
-    if(data?.food_reviewed)setAlreadyReviewed(true);
+    setMeals(data?.meals||[]);
+    setAlreadyReviewed(!!data?.food_reviewed);
     setLoading(false);
   };
 
@@ -1105,19 +1172,32 @@ function ProgressScreen({setScreen,user,profile,setProfile}){
 
   const lastDate=profile?.last_photo_date;
   const daysSince=lastDate?Math.floor((new Date()-new Date(lastDate))/(1000*60*60*24)):null;
-  const dayOfWeek=new Date().getDay();
-  const isSunday=dayOfWeek===0;
-  const overdue=lastDate?daysSince>7:true;
-  const canUpload=isSunday||overdue;
+  const canUpload=!lastDate||daysSince>=7;
+
+  const getGrade=(score)=>{
+    if(score>=90)return'A';
+    if(score>=80)return'B';
+    if(score>=70)return'C';
+    if(score>=60)return'D';
+    return'F';
+  };
+  const gradeColor=(score)=>{
+    if(score>=80)return C.success;
+    if(score>=60)return C.warning;
+    return C.danger;
+  };
 
   return h('div',{style:{minHeight:'100vh',background:C.navy,padding:'54px 24px 100px'}},
     h('div',{style:{fontSize:11,color:C.blue,fontWeight:700,letterSpacing:2,marginBottom:4}},'BODY PROGRESS'),
     h('div',{style:{fontSize:26,fontWeight:900,color:C.silverBright,marginBottom:4}},'Weekly Check-In'),
-    h('div',{style:{fontSize:13,color:C.silverDim,marginBottom:24}},'Coach Skelly scores your body out of 10 every week'),
+    h('div',{style:{fontSize:13,color:C.silverDim,marginBottom:24}},'Coach Skelly scores your body out of 100 every week'),
     profile?.body_score&&h('div',{style:{background:'linear-gradient(135deg,#1C3A6B,#0D2040)',borderRadius:20,padding:24,marginBottom:20,border:'1px solid #1D4ED850',textAlign:'center'}},
       h('div',{style:{fontSize:11,color:C.blue,fontWeight:700,letterSpacing:2,marginBottom:8}},'YOUR CURRENT SCORE'),
-      h('div',{style:{fontSize:64,fontWeight:900,color:C.white,lineHeight:1}},profile.body_score),
-      h('div',{style:{fontSize:14,color:C.silverDim,marginTop:4}},'out of 10')
+      h('div',{style:{display:'flex',alignItems:'baseline',justifyContent:'center',gap:12}},
+        h('div',{style:{fontSize:64,fontWeight:900,color:C.white,lineHeight:1}},profile.body_score),
+        h('div',{style:{fontSize:32,fontWeight:900,color:gradeColor(profile.body_score)}},getGrade(profile.body_score))
+      ),
+      h('div',{style:{fontSize:14,color:C.silverDim,marginTop:4}},'out of 100')
     ),
     improvementBonus&&h('div',{style:{background:'#22C55E15',border:'1px solid #22C55E40',borderRadius:14,padding:'14px 16px',marginBottom:16,display:'flex',gap:12,alignItems:'center'}},
       h('div',{style:{fontSize:24}},'📈'),
@@ -1131,7 +1211,7 @@ function ProgressScreen({setScreen,user,profile,setProfile}){
         h(Avatar,{size:40}),
         h('div',null,
           h('div',{style:{fontSize:12,color:C.blue,fontWeight:700,letterSpacing:1,marginBottom:4}},"COACH SKELLY'S ANALYSIS"),
-          h('div',{style:{fontSize:16,fontWeight:900,color:C.white}},result.score+'/10'),
+          h('div',{style:{fontSize:16,fontWeight:900,color:C.white}},result.score+'/100 ('+getGrade(result.score)+')'),
           h('div',{style:{fontSize:13,color:C.silver,lineHeight:1.6,marginTop:4}},result.overall||result.feedback)
         )
       ),
@@ -1148,7 +1228,7 @@ function ProgressScreen({setScreen,user,profile,setProfile}){
     ),
     error&&h('div',{style:{background:'#EF444415',border:'1px solid #EF444440',borderRadius:10,padding:12,marginBottom:16,fontSize:13,color:C.danger}},error),
     canUpload?h('div',{style:{marginBottom:16}},
-      h('div',{style:{background:'#F59E0B10',border:'1px solid #F59E0B30',borderRadius:12,padding:'10px 14px',marginBottom:14,fontSize:12,color:C.warning,fontWeight:600}},isSunday?'📅 Sunday check-in - mandatory':'⏰ Overdue - catch up now'),
+      h('div',{style:{background:'#F59E0B10',border:'1px solid #F59E0B30',borderRadius:12,padding:'10px 14px',marginBottom:14,fontSize:12,color:C.warning,fontWeight:600}},'📅 Weekly check-in ready'),
       h('div',{style:{fontSize:12,color:C.silverDim,fontWeight:700,letterSpacing:1,marginBottom:6}},'YOUR CURRENT WEIGHT (lbs)'),
       h('input',{value:weight,onChange:e=>setWeight(e.target.value),placeholder:'e.g. 178',type:'number',style:{width:'100%',padding:'12px 14px',borderRadius:10,fontSize:15,background:C.navyLight,border:'1.5px solid #2A3447',color:C.silverBright,outline:'none',boxSizing:'border-box',marginBottom:14}}),
       h('div',{style:{fontSize:12,color:C.silverDim,fontWeight:700,letterSpacing:1,marginBottom:10}},'CAPTURE YOUR ANGLES ('+readyCount+'/4)'),
@@ -1165,13 +1245,13 @@ function ProgressScreen({setScreen,user,profile,setProfile}){
       h('div',{style:{fontSize:11,color:C.silverDim,marginTop:8,textAlign:'center'}},readyCount===0?'Add at least one angle to continue.':(weight.trim()===''?'Enter your weight to continue.':'More angles = better feedback.'))
     ):h('div',{style:{background:C.navyLight,borderRadius:14,padding:20,textAlign:'center',border:'1px solid #2A3447',marginBottom:16}},
       h('div',{style:{fontSize:32,marginBottom:8}},'⏰'),
-      h('div',{style:{fontSize:14,fontWeight:700,color:C.silverBright}},'Next check-in: Sunday'),
+      h('div',{style:{fontSize:14,fontWeight:700,color:C.silverBright}},'Next check-in in '+(7-daysSince)+' days'),
       h('div',{style:{fontSize:12,color:C.silverDim,marginTop:4}},'Weekly photo + weight, every Sunday night')
     ),
     h('div',{style:{background:'#3B82F610',border:'1px solid #3B82F630',borderRadius:14,padding:16,display:'flex',gap:12}},
       h(Avatar,{size:36}),
       h('div',{style:{fontSize:13,color:C.silver,lineHeight:1.6}},
-        profile?.body_score?'"You are at a '+profile.body_score+'/10. Keep hitting your non-negotiables and eating right."':'"Submit your first body photos. I will give you an honest assessment. No sugarcoating."'
+        profile?.body_score?'"You are at a '+profile.body_score+'/100 ('+getGrade(profile.body_score)+'). Keep hitting your non-negotiables and eating right."':'"Submit your first body photos. I will give you an honest assessment. No sugarcoating."'
       )
     ),
     h(BottomNav,{screen:S.PROGRESS,setScreen})
