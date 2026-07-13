@@ -43,6 +43,20 @@ function getLocalDate(){
   return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
 }
 
+function getGrade(score){
+  if(score>=90)return'A';
+  if(score>=80)return'B';
+  if(score>=70)return'C';
+  if(score>=60)return'D';
+  return'F';
+}
+
+function gradeColor(score){
+  if(score>=80)return C.success;
+  if(score>=60)return C.warning;
+  return C.danger;
+}
+
 const S={
   LOADING:'loading',AUTH:'auth',WELCOME:'welcome',
   ONBOARDING:'onboarding',PAYMENT:'payment',
@@ -529,7 +543,8 @@ function DashScreen({setScreen,user,profile,setProfile}){
         ),
         h('button',{onClick:()=>setScreen(S.PROFILE),className:'btn',style:{position:'relative',background:'none',padding:0}},
           profile?.avatar_url?h('img',{src:profile.avatar_url,style:{width:64,height:64,borderRadius:'50%',objectFit:'cover',border:'1.5px solid #2A3447'}}):h(Avatar,{size:64}),
-          h('div',{style:{position:'absolute',bottom:-4,right:-4,background:all?C.success:C.warning,borderRadius:'50%',width:20,height:20,display:'flex',alignItems:'center',justifyContent:'center',fontSize:10,color:'#fff',fontWeight:800,border:'2px solid #0D1117'}},all?'✓':done)
+          h('div',{style:{position:'absolute',bottom:-4,right:-4,background:all?C.success:C.warning,borderRadius:'50%',width:20,height:20,display:'flex',alignItems:'center',justifyContent:'center',fontSize:10,color:'#fff',fontWeight:800,border:'2px solid #0D1117'}},all?'✓':done),
+          profile?.body_score&&h('div',{style:{position:'absolute',top:-6,left:-6,background:gradeColor(profile.body_score),borderRadius:8,padding:'2px 6px',fontSize:10,fontWeight:900,color:'#fff',border:'2px solid #0D1117'}},getGrade(profile.body_score))
         )
       )
     ),
@@ -1156,10 +1171,16 @@ function ProgressScreen({setScreen,user,profile,setProfile}){
     setAnalyzing(true);setError('');setResult(null);
     try{
       const images=Object.values(photos).filter(Boolean);
+      const contextParts=[];
+      if(weight.trim())contextParts.push('Current weight: '+weight.trim()+' lbs');
+      if(profile?.height)contextParts.push('Height: '+profile.height);
+      if(profile?.age)contextParts.push('Age: '+profile.age);
+      if(profile?.goal)contextParts.push('Goal: '+profile.goal);
+      const context=contextParts.length?contextParts.join('. ')+'. Factor this into your honest assessment - be specific about whether the physique matches expectations for these stats.':'';
       const res=await fetch(SB_URL+'/functions/v1/rapid-handler',{
         method:'POST',
         headers:{'Content-Type':'application/json','Authorization':'Bearer '+SB_ANON,'apikey':SB_ANON},
-        body:JSON.stringify({type:'body',images,mediaType:'image/jpeg'})
+        body:JSON.stringify({type:'body',images,mediaType:'image/jpeg',context})
       });
       const data=await res.json();
       const text=data.reply||'{}';
@@ -1182,19 +1203,6 @@ function ProgressScreen({setScreen,user,profile,setProfile}){
   const lastDate=profile?.last_photo_date;
   const daysSince=lastDate?Math.floor((new Date()-new Date(lastDate))/(1000*60*60*24)):null;
   const canUpload=!lastDate||daysSince>=7;
-
-  const getGrade=(score)=>{
-    if(score>=90)return'A';
-    if(score>=80)return'B';
-    if(score>=70)return'C';
-    if(score>=60)return'D';
-    return'F';
-  };
-  const gradeColor=(score)=>{
-    if(score>=80)return C.success;
-    if(score>=60)return C.warning;
-    return C.danger;
-  };
 
   return h('div',{style:{minHeight:'100vh',background:C.navy,padding:'54px 24px 100px'}},
     h('div',{style:{fontSize:11,color:C.blue,fontWeight:700,letterSpacing:2,marginBottom:4}},'BODY PROGRESS'),
