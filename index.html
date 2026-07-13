@@ -48,7 +48,7 @@ const S={
   ONBOARDING:'onboarding',PAYMENT:'payment',
   DASH:'dash',WORKOUT:'workout',EXERCISE:'exercise',
   COACH:'coach',NUTRITION:'nutrition',PROGRESS:'progress',
-  LEADERBOARD:'leaderboard'
+  LEADERBOARD:'leaderboard',PROFILE:'profile'
 };
 
 const NONNEG_TIERS = {
@@ -527,8 +527,8 @@ function DashScreen({setScreen,user,profile,setProfile}){
             h('span',{style:{fontSize:10,fontWeight:700,letterSpacing:1.5,color:C.success,background:'#22C55E20',padding:'3px 10px',borderRadius:20,border:'1px solid #22C55E40'}},'PHASE 1 - RESTORE')
           )
         ),
-        h('div',{style:{position:'relative'}},
-          h(Avatar,{size:64}),
+        h('button',{onClick:()=>setScreen(S.PROFILE),className:'btn',style:{position:'relative',background:'none',padding:0}},
+          profile?.avatar_url?h('img',{src:profile.avatar_url,style:{width:64,height:64,borderRadius:'50%',objectFit:'cover',border:'1.5px solid #2A3447'}}):h(Avatar,{size:64}),
           h('div',{style:{position:'absolute',bottom:-4,right:-4,background:all?C.success:C.warning,borderRadius:'50%',width:20,height:20,display:'flex',alignItems:'center',justifyContent:'center',fontSize:10,color:'#fff',fontWeight:800,border:'2px solid #0D1117'}},all?'✓':done)
         )
       )
@@ -1329,6 +1329,76 @@ function LeaderboardScreen({setScreen,profile}){
   );
 }
 
+function ProfileScreen({setScreen,user,profile,setProfile}){
+  const [name,setName]=useState(profile?.full_name||'');
+  const [uploading,setUploading]=useState(false);
+  const [saving,setSaving]=useState(false);
+  const [saved,setSaved]=useState(false);
+  const fileRef=useRef(null);
+
+  const uploadPhoto=async(e)=>{
+    const file=e.target.files[0];if(!file||!user)return;
+    setUploading(true);
+    try{
+      const path=user.id+'/avatar.jpg';
+      const{error:upErr}=await sb.storage.from('avatars').upload(path,file,{upsert:true,contentType:file.type||'image/jpeg'});
+      if(upErr)throw upErr;
+      const{data}=sb.storage.from('avatars').getPublicUrl(path);
+      const url=data.publicUrl+'?t='+Date.now();
+      await sb.from('profiles').update({avatar_url:url}).eq('id',user.id);
+      setProfile(p=>({...p,avatar_url:url}));
+    }catch(err){alert('Photo upload failed. Try again.');}
+    setUploading(false);
+  };
+
+  const saveName=async()=>{
+    if(!name.trim()||!user)return;
+    setSaving(true);
+    await sb.from('profiles').update({full_name:name.trim()}).eq('id',user.id);
+    setProfile(p=>({...p,full_name:name.trim()}));
+    setSaving(false);
+    setSaved(true);
+    setTimeout(()=>setSaved(false),2000);
+  };
+
+  const signOut=async()=>{
+    await sb.auth.signOut();
+    setScreen(S.AUTH);
+  };
+
+  return h('div',{style:{minHeight:'100vh',background:C.navy,padding:'54px 24px 100px'}},
+    h('button',{onClick:()=>setScreen(S.DASH),className:'btn',style:{background:'none',color:C.blue,fontSize:13,fontWeight:700,marginBottom:20,padding:0}},'Back to Home'),
+    h('div',{style:{fontSize:11,color:C.blue,fontWeight:700,letterSpacing:2,marginBottom:4}},'YOUR PROFILE'),
+    h('div',{style:{fontSize:26,fontWeight:900,color:C.silverBright,marginBottom:24}},'Account'),
+    h('div',{style:{display:'flex',flexDirection:'column',alignItems:'center',marginBottom:28}},
+      h('button',{onClick:()=>fileRef.current&&fileRef.current.click(),disabled:uploading,className:'btn',style:{position:'relative',background:'none',padding:0}},
+        profile?.avatar_url?h('img',{src:profile.avatar_url,style:{width:100,height:100,borderRadius:'50%',objectFit:'cover',border:'2px solid #2A3447'}}):h(Avatar,{size:100}),
+        h('div',{style:{position:'absolute',bottom:0,right:0,width:32,height:32,borderRadius:'50%',background:C.blue,display:'flex',alignItems:'center',justifyContent:'center',fontSize:14,border:'2px solid #0D1117'}},uploading?'…':'📷')
+      ),
+      h('input',{ref:fileRef,type:'file',accept:'image/*',style:{display:'none'},onChange:uploadPhoto}),
+      h('div',{style:{fontSize:12,color:C.silverDim,marginTop:10}},'Tap to change photo')
+    ),
+    h('div',{style:{display:'flex',gap:12,marginBottom:24}},
+      h('div',{style:{flex:1,background:'#F59E0B10',border:'1px solid #F59E0B30',borderRadius:16,padding:'14px 16px',textAlign:'center'}},
+        h('div',{style:{fontSize:20,fontWeight:900,color:C.white}},(profile?.points||0).toLocaleString()),
+        h('div',{style:{fontSize:11,color:C.silverDim}},'points')
+      ),
+      h('div',{style:{flex:1,background:'#3B82F610',border:'1px solid #3B82F630',borderRadius:16,padding:'14px 16px',textAlign:'center'}},
+        h('div',{style:{fontSize:20,fontWeight:900,color:C.white}},profile?.streak||0),
+        h('div',{style:{fontSize:11,color:C.silverDim}},'day streak')
+      ),
+      h('div',{style:{flex:1,background:'#22C55E10',border:'1px solid #22C55E30',borderRadius:16,padding:'14px 16px',textAlign:'center'}},
+        h('div',{style:{fontSize:20,fontWeight:900,color:C.success}},'T'+(profile?.tier||1)),
+        h('div',{style:{fontSize:11,color:C.silverDim}},'tier')
+      )
+    ),
+    h('div',{style:{fontSize:11,color:C.silverDim,fontWeight:700,letterSpacing:1,marginBottom:6}},'YOUR NAME'),
+    h('input',{value:name,onChange:e=>setName(e.target.value),placeholder:'Your name',style:{width:'100%',padding:'14px 16px',borderRadius:12,fontSize:15,background:C.navyLight,border:'1.5px solid #2A3447',color:C.silverBright,outline:'none',boxSizing:'border-box',marginBottom:12}}),
+    h('button',{onClick:saveName,disabled:saving,className:'btn',style:{width:'100%',padding:'14px 0',background:saved?C.success:'linear-gradient(135deg,#1D4ED8,#3B82F6)',borderRadius:12,color:'#fff',fontSize:14,fontWeight:800,marginBottom:28}},saved?'✓ Saved':(saving?'Saving...':'SAVE NAME')),
+    h('button',{onClick:signOut,className:'btn',style:{width:'100%',padding:'14px 0',background:'transparent',border:'1px solid #EF444460',borderRadius:12,color:C.danger,fontSize:14,fontWeight:700}},'Sign Out')
+  );
+}
+
 function App(){
   const [screen,setScreen]=useState(S.LOADING);
   const [user,setUser]=useState(null);
@@ -1384,6 +1454,7 @@ function App(){
       case S.NUTRITION:return h(NutritionScreen,{setScreen,user,profile,setProfile});
       case S.PROGRESS:return h(ProgressScreen,{setScreen,user,profile,setProfile});
       case S.LEADERBOARD:return h(LeaderboardScreen,{setScreen,profile});
+      case S.PROFILE:return h(ProfileScreen,{setScreen,user,profile,setProfile});
       default:return null;
     }
   };
