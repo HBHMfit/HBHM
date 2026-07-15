@@ -1282,15 +1282,24 @@ function ProgressScreen({setScreen,user,profile,setProfile}){
 }
 
 function LeaderboardScreen({setScreen,profile}){
+  const [mode,setMode]=useState('points');
   const [users,setUsers]=useState([]);
   const [loading,setLoading]=useState(true);
 
   useEffect(()=>{
-    sb.from('profiles').select('full_name,points,streak,phase').order('points',{ascending:false}).limit(20).then(({data})=>{
-      setUsers(data||[]);
-      setLoading(false);
-    });
-  },[]);
+    setLoading(true);
+    if(mode==='points'){
+      sb.from('profiles').select('full_name,points,streak,phase,avatar_url').order('points',{ascending:false}).limit(20).then(({data})=>{
+        setUsers(data||[]);
+        setLoading(false);
+      });
+    }else{
+      sb.from('profiles').select('full_name,body_score,streak,avatar_url').not('body_score','is',null).order('body_score',{ascending:false}).limit(20).then(({data})=>{
+        setUsers(data||[]);
+        setLoading(false);
+      });
+    }
+  },[mode]);
 
   const myPoints=profile?.points||0;
   const shirtPct=Math.min(Math.round((myPoints/5000)*100),100);
@@ -1299,15 +1308,19 @@ function LeaderboardScreen({setScreen,profile}){
   return h('div',{style:{minHeight:'100vh',background:C.navy,padding:'54px 24px 100px'}},
     h('div',{style:{fontSize:11,color:C.blue,fontWeight:700,letterSpacing:2,marginBottom:4}},'COMMUNITY'),
     h('div',{style:{fontSize:26,fontWeight:900,color:C.silverBright,marginBottom:4}},'Rankings'),
-    h('div',{style:{fontSize:13,color:C.silverDim,marginBottom:20}},'Top 5 win a free HBHM compression shirt 👕'),
-    h('div',{style:{background:'linear-gradient(135deg,#1C3A6B,#0D2040)',borderRadius:16,padding:'14px 20px',marginBottom:16,border:'1px solid #1D4ED850',display:'flex',justifyContent:'space-between',alignItems:'center'}},
+    h('div',{style:{fontSize:13,color:C.silverDim,marginBottom:16}},'Top 5 win a free HBHM compression shirt 👕'),
+    h('div',{style:{display:'flex',background:C.navyLight,borderRadius:12,padding:4,marginBottom:20}},
+      h('button',{onClick:()=>setMode('points'),className:'btn',style:{flex:1,padding:'10px 0',borderRadius:10,background:mode==='points'?C.blue:'transparent',color:mode==='points'?'#fff':C.silverDim,fontSize:13,fontWeight:700}},'🏆 Points'),
+      h('button',{onClick:()=>setMode('body'),className:'btn',style:{flex:1,padding:'10px 0',borderRadius:10,background:mode==='body'?C.blue:'transparent',color:mode==='body'?'#fff':C.silverDim,fontSize:13,fontWeight:700}},'💪 Body Rank')
+    ),
+    mode==='points'&&h('div',{style:{background:'linear-gradient(135deg,#1C3A6B,#0D2040)',borderRadius:16,padding:'14px 20px',marginBottom:16,border:'1px solid #1D4ED850',display:'flex',justifyContent:'space-between',alignItems:'center'}},
       h('div',null,
         h('div',{style:{fontSize:12,color:C.blue,fontWeight:700}},'MONTHLY PRIZE'),
         h('div',{style:{fontSize:16,fontWeight:800,color:C.white,marginTop:2}},'HBHM Compression Long Sleeve')
       ),
       h('div',{style:{fontSize:36}},'👕')
     ),
-    h('div',{style:{background:C.navyLight,borderRadius:16,padding:'16px 20px',marginBottom:24,border:'1px solid #2A3447'}},
+    mode==='points'&&h('div',{style:{background:C.navyLight,borderRadius:16,padding:'16px 20px',marginBottom:24,border:'1px solid #2A3447'}},
       h('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}},
         h('div',{style:{fontSize:12,color:C.silverDim,fontWeight:700,letterSpacing:1}},'5,000 PT SHIRT MILESTONE'),
         h('div',{style:{fontSize:12,fontWeight:800,color:C.white}},myPoints.toLocaleString()+' / 5,000')
@@ -1318,18 +1331,23 @@ function LeaderboardScreen({setScreen,profile}){
     ),
     loading?h('div',{style:{textAlign:'center',color:C.silverDim,padding:20}},'Loading...'):
     users.length===0?h('div',{style:{background:C.navyLight,borderRadius:14,padding:24,textAlign:'center',border:'1px solid #2A3447'}},
-      h('div',{style:{fontSize:32,marginBottom:8}},'🏆'),
-      h('div',{style:{fontSize:14,color:C.silverDim}},'No rankings yet. Be the first to log a streak.')
+      h('div',{style:{fontSize:32,marginBottom:8}},mode==='points'?'🏆':'💪'),
+      h('div',{style:{fontSize:14,color:C.silverDim}},mode==='points'?'No rankings yet. Be the first to log a streak.':'No body scores yet. Submit a weekly check-in to rank.')
     ):h('div',{style:{display:'flex',flexDirection:'column',gap:10}},
       users.map((u,i)=>h('div',{key:i,style:{background:C.navyLight,borderRadius:14,padding:'14px 16px',border:'1.5px solid #2A3447',display:'flex',alignItems:'center',gap:14}},
-        h('div',{style:{width:36,height:36,borderRadius:'50%',background:C.border,display:'flex',alignItems:'center',justifyContent:'center',fontSize:i<3?20:13,fontWeight:700,flexShrink:0}},medals[i]||(i+1)+'th'),
+        h('div',{style:{width:36,height:36,borderRadius:'50%',background:C.border,display:'flex',alignItems:'center',justifyContent:'center',fontSize:i<3?20:13,fontWeight:700,flexShrink:0,overflow:'hidden'}},
+          u.avatar_url?h('img',{src:u.avatar_url,style:{width:'100%',height:'100%',objectFit:'cover'}}):(medals[i]||(i+1)+'th')
+        ),
         h('div',{style:{flex:1}},
           h('div',{style:{fontSize:14,fontWeight:800,color:C.silverBright}},u.full_name||'Athlete'),
           h('div',{style:{fontSize:11,color:C.silverDim,marginTop:2}},'Streak: '+(u.streak||0)+' days')
         ),
-        h('div',{style:{textAlign:'right'}},
+        mode==='points'?h('div',{style:{textAlign:'right'}},
           h('div',{style:{fontSize:16,fontWeight:900,color:C.white}},(u.points||0).toLocaleString()),
           h('div',{style:{fontSize:10,color:C.silverDim}},'pts')
+        ):h('div',{style:{textAlign:'right'}},
+          h('div',{style:{fontSize:16,fontWeight:900,color:gradeColor(u.body_score)}},u.body_score+' '+getGrade(u.body_score)),
+          h('div',{style:{fontSize:10,color:C.silverDim}},'score')
         )
       ))
     ),
