@@ -614,6 +614,10 @@ function WorkoutScreen({setScreen,setEx,profile,user,setProfile,workouts}){
   const [loadingPlan,setLoadingPlan]=useState(false);
   const [selectedDay,setSelectedDay]=useState(null);
   const [todayCompleted,setTodayCompleted]=useState({});
+  const [journal,setJournal]=useState({felt:'',hurt:'',mindset:'',wantMoreIntensity:''});
+  const [journalSaved,setJournalSaved]=useState(false);
+  const [journalLoaded,setJournalLoaded]=useState(false);
+  const [savingJournal,setSavingJournal]=useState(false);
   const types=['All','Stretch','Pilates','Conditioning','Strength'];
   const colors={Stretch:C.success,Pilates:'#A855F7',Flexibility:'#06B6D4',Conditioning:C.warning,Strength:C.blue};
   const icons={Stretch:'🤸',Pilates:'🧘',Flexibility:'🌊',Conditioning:'⚡',Strength:'💪'};
@@ -658,6 +662,38 @@ function WorkoutScreen({setScreen,setEx,profile,user,setProfile,workouts}){
       }
     });
   },[user,hasPlan]);
+
+  useEffect(()=>{
+    if(!user)return;
+    const today=getLocalDate();
+    sb.from('workout_journal').select('*').eq('user_id',user.id).eq('date',today).maybeSingle().then(({data})=>{
+      if(data){
+        setJournal({felt:data.felt||'',hurt:data.hurt||'',mindset:data.mindset||'',wantMoreIntensity:data.want_more_intensity||''});
+        setJournalSaved(true);
+      }
+      setJournalLoaded(true);
+    });
+  },[user]);
+
+  const saveJournal=async()=>{
+    if(!user)return;
+    setSavingJournal(true);
+    const today=getLocalDate();
+    const{data:existing}=await sb.from('workout_journal').select('id').eq('user_id',user.id).eq('date',today).maybeSingle();
+    const payload={felt:journal.felt,hurt:journal.hurt,mindset:journal.mindset,want_more_intensity:journal.wantMoreIntensity};
+    if(existing){
+      await sb.from('workout_journal').update(payload).eq('id',existing.id);
+    }else{
+      await sb.from('workout_journal').insert({user_id:user.id,date:today,...payload});
+      const{data:freshProfile}=await sb.from('profiles').select('points').eq('id',user.id).maybeSingle();
+      const basePoints=freshProfile?.points??(profile?.points||0);
+      const np=basePoints+5;
+      await sb.from('profiles').update({points:np}).eq('id',user.id);
+      setProfile(p=>({...p,points:np}));
+    }
+    setJournalSaved(true);
+    setSavingJournal(false);
+  };
 
   const buildWeek=async()=>{
     setLoadingPlan(true);
@@ -751,6 +787,30 @@ function WorkoutScreen({setScreen,setEx,profile,user,setProfile,workouts}){
               )
             );
           })
+        ),
+        isToday&&selectedPlan.picks?.length>0&&selectedPlan.picks.every(name=>todayCompleted[name])&&journalLoaded&&h('div',{style:{background:C.navyLight,borderRadius:14,padding:16,border:'1px solid #2A3447',marginTop:12}},
+          journalSaved?h('div',{style:{display:'flex',gap:10,alignItems:'center'}},
+            h('span',{style:{fontSize:20}},'✅'),
+            h('div',{style:{fontSize:13,color:C.success,fontWeight:700}},'Journal logged for today. Nice work.')
+          ):h('div',null,
+            h('div',{style:{display:'flex',gap:10,marginBottom:12}},
+              h(Avatar,{size:28}),
+              h('div',{style:{fontSize:13,color:C.silver,lineHeight:1.5,flex:1}},"Workout's done. Quick check-in before you go.")
+            ),
+            h('div',{style:{fontSize:11,color:C.silverDim,marginBottom:6,fontWeight:600}},'HOW DID IT FEEL?'),
+            h('div',{style:{display:'flex',gap:8,marginBottom:12}},
+              ['Great','Good','Rough'].map(opt=>h('button',{key:opt,onClick:()=>setJournal(j=>({...j,felt:opt})),className:'btn',style:{flex:1,padding:'8px 0',borderRadius:10,fontSize:12,fontWeight:700,background:journal.felt===opt?C.blue:C.navy,color:journal.felt===opt?'#fff':C.silverDim,border:'1px solid '+(journal.felt===opt?C.blue:'#2A3447')}},opt))
+            ),
+            h('div',{style:{fontSize:11,color:C.silverDim,marginBottom:6,fontWeight:600}},'ANYTHING HURT OR FEEL TIGHT?'),
+            h('input',{value:journal.hurt,onChange:e=>setJournal(j=>({...j,hurt:e.target.value})),placeholder:'e.g. left knee, lower back',style:{width:'100%',padding:'10px 12px',borderRadius:10,fontSize:13,background:C.navy,border:'1.5px solid #2A3447',color:C.silverBright,outline:'none',boxSizing:'border-box',marginBottom:12}}),
+            h('div',{style:{fontSize:11,color:C.silverDim,marginBottom:6,fontWeight:600}},"WHAT'S YOUR MINDSET RIGHT NOW?"),
+            h('input',{value:journal.mindset,onChange:e=>setJournal(j=>({...j,mindset:e.target.value})),placeholder:'e.g. motivated, tired, proud',style:{width:'100%',padding:'10px 12px',borderRadius:10,fontSize:13,background:C.navy,border:'1.5px solid #2A3447',color:C.silverBright,outline:'none',boxSizing:'border-box',marginBottom:12}}),
+            h('div',{style:{fontSize:11,color:C.silverDim,marginBottom:6,fontWeight:600}},'WANT MORE INTENSITY NEXT TIME?'),
+            h('div',{style:{display:'flex',gap:8,marginBottom:14}},
+              ['Yes','No','Not sure'].map(opt=>h('button',{key:opt,onClick:()=>setJournal(j=>({...j,wantMoreIntensity:opt})),className:'btn',style:{flex:1,padding:'8px 0',borderRadius:10,fontSize:12,fontWeight:700,background:journal.wantMoreIntensity===opt?C.blue:C.navy,color:journal.wantMoreIntensity===opt?'#fff':C.silverDim,border:'1px solid '+(journal.wantMoreIntensity===opt?C.blue:'#2A3447')}},opt))
+            ),
+            h('button',{onClick:saveJournal,disabled:savingJournal||!journal.felt,className:'btn',style:{width:'100%',padding:'12px 0',background:!journal.felt?C.border:'linear-gradient(135deg,#1D4ED8,#3B82F6)',borderRadius:10,color:!journal.felt?C.silverDim:'#fff',fontSize:13,fontWeight:800}},savingJournal?'Saving...':'LOG IT (+5 pts)')
+          )
         ),
         isToday&&h('button',{onClick:()=>setBuildingWeek(true),className:'btn',style:{width:'100%',marginTop:10,padding:'10px 0',background:'transparent',border:'1px solid #2A3447',borderRadius:10,color:C.silverDim,fontSize:12}},'Rebuild this week')
       )
