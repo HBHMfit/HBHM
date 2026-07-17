@@ -160,7 +160,7 @@ function BottomNav({screen,setScreen}){
   );
 }
 
-function AuthScreen({setScreen,setUser}){
+function AuthScreen({setScreen,setUser,setProfile}){
   const [mode,setMode]=useState('signup');
   const [email,setEmail]=useState('');
   const [password,setPassword]=useState('');
@@ -184,7 +184,9 @@ function AuthScreen({setScreen,setUser}){
         const{data,error:err}=await sb.auth.signInWithPassword({email,password});
         if(err)throw err;
         setUser(data.user);
-        setScreen(S.DASH);
+        const{data:prof}=await sb.from('profiles').select('*').eq('id',data.user.id).maybeSingle();
+        if(prof)setProfile(prof);
+        setScreen(prof?.is_paid?S.DASH:S.PAYMENT);
       }
     }catch(err){setError(err.message);}
     setLoading(false);
@@ -406,7 +408,27 @@ function OnboardingFlow({setScreen,user,setProfile}){
   );
 }
 
-function PaymentScreen({setScreen}){
+function PaymentScreen({setScreen,user,profile,setProfile}){
+  const [checking,setChecking]=useState(false);
+
+  const checkPayment=async()=>{
+    if(!user)return;
+    setChecking(true);
+    const{data}=await sb.from('profiles').select('is_paid').eq('id',user.id).maybeSingle();
+    if(data?.is_paid){
+      setProfile(p=>({...p,is_paid:true}));
+      setScreen(S.DASH);
+    }
+    setChecking(false);
+  };
+
+  useEffect(()=>{
+    const id=setInterval(checkPayment,5000);
+    return ()=>clearInterval(id);
+  },[user]);
+
+  const payLink='https://buy.stripe.com/8x28wP6q96Td3NW8vl3Nm00'+(user?'?client_reference_id='+user.id:'');
+
   return h('div',{style:{minHeight:'100vh',background:C.navy,padding:'60px 24px 40px'}},
     h('div',{style:{display:'flex',justifyContent:'center',marginBottom:24}},h(Logo,{size:60,animate:true})),
     h('div',{style:{fontSize:11,color:C.blue,fontWeight:700,letterSpacing:2,marginBottom:8,textAlign:'center'}},'UNLOCK HBHM'),
@@ -427,9 +449,9 @@ function PaymentScreen({setScreen}){
         )
       )
     ),
-    h('a',{href:'https://buy.stripe.com/8x28wP6q96Td3NW8vl3Nm00',style:{display:'block',width:'100%',padding:'16px 0',background:'linear-gradient(135deg,#1D4ED8,#3B82F6)',borderRadius:14,color:'#fff',fontSize:15,fontWeight:800,textAlign:'center',textDecoration:'none'}},'PAY $5/WEEK - START NOW'),
+    h('a',{href:payLink,style:{display:'block',width:'100%',padding:'16px 0',background:'linear-gradient(135deg,#1D4ED8,#3B82F6)',borderRadius:14,color:'#fff',fontSize:15,fontWeight:800,textAlign:'center',textDecoration:'none'}},'PAY $5/WEEK - START NOW'),
     h('div',{style:{textAlign:'center',marginTop:12,fontSize:11,color:C.silverDim}},'Secured by Stripe - Cancel anytime'),
-    h('button',{onClick:()=>setScreen(S.DASH),className:'btn',style:{width:'100%',marginTop:12,padding:'12px 0',background:'transparent',border:'1px solid #2A3447',borderRadius:14,color:C.silverDim,fontSize:13}},'Skip for now (beta)')
+    h('button',{onClick:checkPayment,disabled:checking,className:'btn',style:{width:'100%',marginTop:16,padding:'12px 0',background:'transparent',border:'1px solid #2A3447',borderRadius:14,color:C.silverDim,fontSize:13}},checking?'Checking...':"I've paid - Refresh")
   );
 }
 
@@ -1563,8 +1585,8 @@ function App(){
     sb.auth.getSession().then(async({data:{session}})=>{
       if(session?.user){
         setUser(session.user);
-        await loadProfile(session.user.id);
-        setScreen(S.DASH);
+        const prof=await loadProfile(session.user.id);
+        setScreen(prof?.is_paid?S.DASH:S.PAYMENT);
       } else {
         setScreen(S.AUTH);
       }
@@ -1582,10 +1604,10 @@ function App(){
         h(Logo,{size:80,animate:true}),
         h('div',{style:{fontSize:11,color:C.silverDim,letterSpacing:3}},'LOADING...')
       );
-      case S.AUTH:return h(AuthScreen,{setScreen,setUser});
+      case S.AUTH:return h(AuthScreen,{setScreen,setUser,setProfile});
       case S.WELCOME:return h(WelcomeScreen,{setScreen});
       case S.ONBOARDING:return h(OnboardingFlow,{setScreen,user,setProfile});
-      case S.PAYMENT:return h(PaymentScreen,{setScreen});
+      case S.PAYMENT:return h(PaymentScreen,{setScreen,user,profile,setProfile});
       case S.DASH:return h(DashScreen,{setScreen,user,profile,setProfile});
       case S.WORKOUT:return h(WorkoutScreen,{setScreen,setEx,profile,user,setProfile,workouts});
       case S.EXERCISE:return h(ExerciseScreen,{setScreen,exercise:ex,user,profile,setProfile});
