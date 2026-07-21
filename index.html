@@ -1085,6 +1085,78 @@ function NutritionScreen({setScreen,user,profile,setProfile}){
   const [reviewResult,setReviewResult]=useState(null);
   const [alreadyReviewed,setAlreadyReviewed]=useState(false);
   const [today,setToday]=useState(getLocalDate());
+  const [settingGoals,setSettingGoals]=useState(false);
+  const [goalChoice,setGoalChoice]=useState('');
+  const [heightInput,setHeightInput]=useState(profile?.height||'');
+  const [weightInput,setWeightInput]=useState(profile?.weight||'');
+  const [loadingTargets,setLoadingTargets]=useState(false);
+  const [recalibrating,setRecalibrating]=useState(false);
+  const [paceChoice,setPaceChoice]=useState('');
+  const [recalWeight,setRecalWeight]=useState('');
+  const [loadingRecal,setLoadingRecal]=useState(false);
+
+  const daysSinceTarget=profile?.target_set_date?Math.floor((new Date()-new Date(profile.target_set_date))/(1000*60*60*24)):null;
+  const recalDue=daysSinceTarget!=null&&daysSinceTarget>=14;
+
+  const askSkellyToRecalibrate=async()=>{
+    if(!paceChoice||!recalWeight.trim())return;
+    setLoadingRecal(true);
+    const startW=parseFloat(profile?.target_start_weight)||null;
+    const currentW=parseFloat(recalWeight);
+    const delta=startW!=null?(currentW-startW).toFixed(1):null;
+    const msg='Recalibrate daily nutrition targets for a client in the HBHM fitness app. '+
+      'Original goal: '+(profile?.nutrition_goal||'not specified')+'. '+
+      'Original targets: '+(profile?.calorie_target||'?')+' kcal, '+(profile?.protein_target||'?')+'g protein, '+(profile?.carbs_target||'?')+'g carbs, '+(profile?.fat_target||'?')+'g fat. '+
+      'Weight '+daysSinceTarget+' days ago: '+(startW||'unknown')+' lbs. Weight now: '+currentW+' lbs.'+(delta?' Change: '+(delta>0?'+':'')+delta+' lbs.':'')+' '+
+      'Client says their pace has been: '+paceChoice+'. '+
+      'Adjust the targets based on actual results, not just theory. Respond with ONLY JSON, no other text: {"calories":2200,"protein":160,"carbs":220,"fat":70}';
+    try{
+      const res=await fetch(SB_URL+'/functions/v1/Coach-Skelly',{
+        method:'POST',
+        headers:{'Content-Type':'application/json','Authorization':'Bearer '+SB_ANON,'apikey':SB_ANON},
+        body:JSON.stringify({message:msg})
+      });
+      const data=await res.json();
+      const text=(data.reply||'{}').replace(/```json|```/g,'').trim();
+      const parsed=JSON.parse(text);
+      await sb.from('profiles').update({
+        calorie_target:parsed.calories,protein_target:parsed.protein,carbs_target:parsed.carbs,fat_target:parsed.fat,
+        weight:recalWeight.trim(),target_set_date:getLocalDate(),target_start_weight:recalWeight.trim()
+      }).eq('id',user.id);
+      setProfile(p=>({...p,calorie_target:parsed.calories,protein_target:parsed.protein,carbs_target:parsed.carbs,fat_target:parsed.fat,weight:recalWeight.trim(),target_set_date:getLocalDate(),target_start_weight:recalWeight.trim()}));
+      setRecalibrating(false);
+      setPaceChoice('');setRecalWeight('');
+    }catch(e){
+      alert("Couldn't reach Skelly. Try again.");
+    }
+    setLoadingRecal(false);
+  };
+
+  const askSkellyForTargets=async()=>{
+    if(!goalChoice||!heightInput.trim()||!weightInput.trim())return;
+    setLoadingTargets(true);
+    const msg='Set daily nutrition targets for a client in the HBHM fitness app. Height: '+heightInput+'. Weight: '+weightInput+' lbs. '+(profile?.age?'Age: '+profile.age+'. ':'')+'Current phase: '+(profile?.phase||1)+'. Goal: '+goalChoice+'. '+(profile?.body_score?'Current body score: '+profile.body_score+'/100. ':'')+'Respond with ONLY JSON, no other text: {"calories":2200,"protein":160,"carbs":220,"fat":70}';
+    try{
+      const res=await fetch(SB_URL+'/functions/v1/Coach-Skelly',{
+        method:'POST',
+        headers:{'Content-Type':'application/json','Authorization':'Bearer '+SB_ANON,'apikey':SB_ANON},
+        body:JSON.stringify({message:msg})
+      });
+      const data=await res.json();
+      const text=(data.reply||'{}').replace(/```json|```/g,'').trim();
+      const parsed=JSON.parse(text);
+      await sb.from('profiles').update({
+        calorie_target:parsed.calories,protein_target:parsed.protein,carbs_target:parsed.carbs,fat_target:parsed.fat,
+        nutrition_goal:goalChoice,height:heightInput.trim(),weight:weightInput.trim(),
+        target_set_date:getLocalDate(),target_start_weight:weightInput.trim()
+      }).eq('id',user.id);
+      setProfile(p=>({...p,calorie_target:parsed.calories,protein_target:parsed.protein,carbs_target:parsed.carbs,fat_target:parsed.fat,nutrition_goal:goalChoice,height:heightInput.trim(),weight:weightInput.trim(),target_set_date:getLocalDate(),target_start_weight:weightInput.trim()}));
+      setSettingGoals(false);
+    }catch(e){
+      alert("Couldn't reach Skelly. Try again.");
+    }
+    setLoadingTargets(false);
+  };
 
   useEffect(()=>{
     const id=setInterval(()=>{
@@ -1180,12 +1252,50 @@ function NutritionScreen({setScreen,user,profile,setProfile}){
   };
 
   const totals={cal:meals.reduce((s,m)=>s+(m.cal||0),0),protein:meals.reduce((s,m)=>s+(m.protein||0),0),carbs:meals.reduce((s,m)=>s+(m.carbs||0),0),fat:meals.reduce((s,m)=>s+(m.fat||0),0)};
-  const pct=Math.min(Math.round((totals.cal/2200)*100),100);
+  const calGoal=profile?.calorie_target||2200;
+  const hasTargets=!!profile?.calorie_target;
+  const pct=Math.min(Math.round((totals.cal/calGoal)*100),100);
   const inp={width:'100%',padding:'12px 14px',borderRadius:10,fontSize:14,background:C.navy,border:'1.5px solid #2A3447',color:C.silverBright,outline:'none',boxSizing:'border-box',marginBottom:10};
 
   return h('div',{style:{minHeight:'100vh',background:C.navy,padding:'54px 24px 100px'}},
     h('div',{style:{fontSize:11,color:C.blue,fontWeight:700,letterSpacing:2,marginBottom:4}},'NUTRITION LOG'),
     h('div',{style:{fontSize:26,fontWeight:900,color:C.silverBright,marginBottom:16}},"Today's Fuel"),
+    !hasTargets&&!settingGoals&&h('button',{onClick:()=>setSettingGoals(true),className:'btn',style:{width:'100%',padding:'14px',marginBottom:16,background:'linear-gradient(135deg,#1D4ED8,#3B82F6)',borderRadius:14,color:'#fff',fontSize:13,fontWeight:800}},'💀 ASK SKELLY TO SET MY TARGETS'),
+    hasTargets&&recalDue&&!recalibrating&&h('div',{style:{background:'#F59E0B10',border:'1px solid #F59E0B30',borderRadius:14,padding:16,marginBottom:16}},
+      h('div',{style:{display:'flex',gap:10,marginBottom:10}},
+        h('span',{style:{fontSize:20}},'📊'),
+        h('div',{style:{fontSize:13,color:C.silver,lineHeight:1.5,flex:1}},"It's been "+daysSinceTarget+" days. Time to check if your targets are actually working.")
+      ),
+      h('button',{onClick:()=>setRecalibrating(true),className:'btn',style:{width:'100%',padding:'12px 0',background:'linear-gradient(135deg,#1D4ED8,#3B82F6)',borderRadius:10,color:'#fff',fontSize:13,fontWeight:800}},'RECALIBRATE MY TARGETS')
+    ),
+    recalibrating&&h('div',{style:{background:C.navyLight,borderRadius:14,padding:16,border:'1px solid #3B82F640',marginBottom:16}},
+      h('div',{style:{fontSize:12,color:C.blue,fontWeight:700,marginBottom:10}},'HOW HAS IT ACTUALLY BEEN GOING?'),
+      h('div',{style:{fontSize:11,color:C.silverDim,marginBottom:6,fontWeight:600}},'CURRENT WEIGHT (lbs)'),
+      h('input',{value:recalWeight,onChange:e=>setRecalWeight(e.target.value),placeholder:'e.g. 182',type:'number',style:{...inp,marginBottom:10}}),
+      h('div',{style:{fontSize:11,color:C.silverDim,marginBottom:6,fontWeight:600}},'YOUR RESULTS SO FAR'),
+      h('div',{style:{display:'flex',flexDirection:'column',gap:8,marginBottom:14}},
+        ['Working well, keep going','Too slow, want faster results','Too fast, feels unsustainable','Not sure / plateaued'].map(p=>h('button',{key:p,onClick:()=>setPaceChoice(p),className:'btn',style:{padding:'12px 14px',borderRadius:10,textAlign:'left',fontSize:13,fontWeight:700,background:paceChoice===p?'#3B82F620':C.navy,border:'1.5px solid '+(paceChoice===p?C.blue:'#2A3447'),color:paceChoice===p?C.silverBright:C.silverDim}},p))
+      ),
+      h('div',{style:{display:'flex',gap:10}},
+        h('button',{onClick:askSkellyToRecalibrate,disabled:loadingRecal||!paceChoice||!recalWeight.trim(),className:'btn',style:{flex:1,padding:'12px 0',background:'linear-gradient(135deg,#1D4ED8,#3B82F6)',borderRadius:10,color:'#fff',fontSize:14,fontWeight:700,opacity:loadingRecal?0.7:1}},loadingRecal?'Adjusting...':'UPDATE MY TARGETS'),
+        h('button',{onClick:()=>setRecalibrating(false),className:'btn',style:{padding:'12px 16px',background:C.border,borderRadius:10,color:C.silverDim,fontSize:14}},'Cancel')
+      )
+    ),
+    settingGoals&&h('div',{style:{background:C.navyLight,borderRadius:14,padding:16,border:'1px solid #3B82F640',marginBottom:16}},
+      h('div',{style:{fontSize:12,color:C.blue,fontWeight:700,marginBottom:10}},'COACH SKELLY WANTS TO KNOW'),
+      h('div',{style:{fontSize:11,color:C.silverDim,marginBottom:6,fontWeight:600}},'HEIGHT'),
+      h('input',{value:heightInput,onChange:e=>setHeightInput(e.target.value),placeholder:"e.g. 5'10",style:{...inp,marginBottom:10}}),
+      h('div',{style:{fontSize:11,color:C.silverDim,marginBottom:6,fontWeight:600}},'CURRENT WEIGHT (lbs)'),
+      h('input',{value:weightInput,onChange:e=>setWeightInput(e.target.value),placeholder:'e.g. 185',type:'number',style:{...inp,marginBottom:10}}),
+      h('div',{style:{fontSize:11,color:C.silverDim,marginBottom:6,fontWeight:600}},'WHAT DO YOU WANT FROM THIS PHASE?'),
+      h('div',{style:{display:'flex',flexDirection:'column',gap:8,marginBottom:14}},
+        ['Lose fat','Build muscle','Maintain and recomp'].map(g=>h('button',{key:g,onClick:()=>setGoalChoice(g),className:'btn',style:{padding:'12px 14px',borderRadius:10,textAlign:'left',fontSize:13,fontWeight:700,background:goalChoice===g?'#3B82F620':C.navy,border:'1.5px solid '+(goalChoice===g?C.blue:'#2A3447'),color:goalChoice===g?C.silverBright:C.silverDim}},g))
+      ),
+      h('div',{style:{display:'flex',gap:10}},
+        h('button',{onClick:askSkellyForTargets,disabled:loadingTargets||!goalChoice||!heightInput.trim()||!weightInput.trim(),className:'btn',style:{flex:1,padding:'12px 0',background:'linear-gradient(135deg,#1D4ED8,#3B82F6)',borderRadius:10,color:'#fff',fontSize:14,fontWeight:700,opacity:loadingTargets?0.7:1}},loadingTargets?'Calculating...':'SET MY TARGETS'),
+        h('button',{onClick:()=>setSettingGoals(false),className:'btn',style:{padding:'12px 16px',background:C.border,borderRadius:10,color:C.silverDim,fontSize:14}},'Cancel')
+      )
+    ),
     h('div',{style:{background:C.navyLight,borderRadius:20,padding:20,display:'flex',alignItems:'center',gap:20,marginBottom:16}},
       h('div',{style:{position:'relative',width:80,height:80,flexShrink:0}},
         h('svg',{width:'80',height:'80',viewBox:'0 0 80 80'},
@@ -1198,11 +1308,11 @@ function NutritionScreen({setScreen,user,profile,setProfile}){
       ),
       h('div',{style:{flex:1}},
         h('div',{style:{fontSize:28,fontWeight:900,color:C.white}},totals.cal.toLocaleString()),
-        h('div',{style:{fontSize:13,color:C.silverDim}},'of 2,200 kcal'),
+        h('div',{style:{fontSize:13,color:C.silverDim}},'of '+calGoal.toLocaleString()+' kcal'+(hasTargets?'':' (default)')),
         h('div',{style:{display:'flex',gap:10,marginTop:8,flexWrap:'wrap'}},
-          h('div',{style:{fontSize:11,color:C.blue}},totals.protein+'g protein'),
-          h('div',{style:{fontSize:11,color:C.warning}},totals.carbs+'g carbs'),
-          h('div',{style:{fontSize:11,color:C.danger}},totals.fat+'g fat')
+          h('div',{style:{fontSize:11,color:C.blue}},totals.protein+(profile?.protein_target?'/'+profile.protein_target:'')+'g protein'),
+          h('div',{style:{fontSize:11,color:C.warning}},totals.carbs+(profile?.carbs_target?'/'+profile.carbs_target:'')+'g carbs'),
+          h('div',{style:{fontSize:11,color:C.danger}},totals.fat+(profile?.fat_target?'/'+profile.fat_target:'')+'g fat')
         )
       )
     ),
