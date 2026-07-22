@@ -62,7 +62,7 @@ const S={
   ONBOARDING:'onboarding',PAYMENT:'payment',
   DASH:'dash',WORKOUT:'workout',EXERCISE:'exercise',
   COACH:'coach',NUTRITION:'nutrition',PROGRESS:'progress',
-  LEADERBOARD:'leaderboard',PROFILE:'profile'
+  LEADERBOARD:'leaderboard',PROFILE:'profile',TRAINER:'trainer'
 };
 
 const NONNEG_TIERS = {
@@ -455,9 +455,10 @@ function PaymentScreen({setScreen,user,profile,setProfile}){
   );
 }
 
-function DashScreen({setScreen,user,profile,setProfile}){
+function DashScreen({setScreen,user,profile,setProfile,nonnegTiers}){
   const tier=profile?.tier||1;
-  const NONNEG=NONNEG_TIERS[tier]||NONNEG_TIERS[1];
+  const TIERS=nonnegTiers||NONNEG_TIERS;
+  const NONNEG=TIERS[tier]||TIERS[1];
   const [checked,setChecked]=useState({});
   const [disciplineChecked,setDisciplineChecked]=useState({});
   const [saving,setSaving]=useState(false);
@@ -681,7 +682,7 @@ function DashScreen({setScreen,user,profile,setProfile}){
   );
 }
 
-function WorkoutScreen({setScreen,setEx,profile,user,setProfile,workouts}){
+function WorkoutScreen({setScreen,setEx,profile,user,setProfile,workouts,coachPrompt}){
   const [filter,setFilter]=useState('All');
   const [buildingWeek,setBuildingWeek]=useState(false);
   const [priority,setPriority]=useState('');
@@ -784,12 +785,7 @@ function WorkoutScreen({setScreen,setEx,profile,user,setProfile,workouts}){
       const res=await fetch(SB_URL+'/functions/v1/Coach-Skelly',{
         method:'POST',
         headers:{'Content-Type':'application/json','Authorization':'Bearer '+SB_ANON,'apikey':SB_ANON},
-        body:JSON.stringify({message:msg})
-      });
-      const data=await res.json();
-      const text=(data.reply||'{}').replace(/```json|```/g,'').trim();
-      const parsed=JSON.parse(text);
-      await sb.from('profiles').update({weekly_plan:parsed,weekly_plan_week_start:thisMonday}).eq('id',user.id);
+        body:JSON.stringify({message:msg,systemPrompt:coachPrompt||undefined})
       setProfile(p=>({...p,weekly_plan:parsed,weekly_plan_week_start:thisMonday}));
       setBuildingWeek(false);
     }catch(e){
@@ -931,6 +927,7 @@ function ExerciseScreen({setScreen,exercise,user,profile,setProfile}){
     h('button',{onClick:()=>setScreen(S.WORKOUT),className:'btn',style:{background:'none',color:C.blue,fontSize:13,fontWeight:700,marginBottom:20,padding:0}},'Back to Library'),
     h('div',{style:{fontSize:11,color:col,fontWeight:700,letterSpacing:2,marginBottom:6}},exercise.type.toUpperCase()),
     h('div',{style:{fontSize:26,fontWeight:900,color:C.silverBright,marginBottom:4}},exercise.name),
+    exercise.media_url&&h('img',{src:exercise.media_url,style:{width:'100%',height:220,objectFit:'cover',borderRadius:16,marginBottom:12,border:'1px solid #2A3447'}}),
     h('div',{style:{background:C.navyLight,borderRadius:16,padding:16,border:'1px solid #2A3447',marginBottom:12,display:'flex',gap:12}},
       h(Avatar,{size:44,animate:started}),
       h('div',{style:{flex:1}},
@@ -996,7 +993,7 @@ function ExerciseScreen({setScreen,exercise,user,profile,setProfile}){
   );
 }
 
-function CoachScreen({setScreen,user}){
+function CoachScreen({setScreen,user,coachPrompt}){
   const WELCOME_MSG={role:'coach',text:"Welcome to Phase 1. Your joints, tendons, movement patterns - we fix these FIRST. Daily non-negotiables, food logging, weekly body photo. No exceptions. Ask me anything."};
   const [msgs,setMsgs]=useState([WELCOME_MSG]);
   const [input,setInput]=useState('');
@@ -1031,7 +1028,7 @@ function CoachScreen({setScreen,user}){
       const res=await fetch(SB_URL+'/functions/v1/Coach-Skelly',{
         method:'POST',
         headers:{'Content-Type':'application/json','Authorization':'Bearer '+SB_ANON,'apikey':SB_ANON},
-        body:JSON.stringify({message:msg,history})
+        body:JSON.stringify({message:msg,history,systemPrompt:coachPrompt||undefined})
       });
       const data=await res.json();
       const reply=data.reply||'Stay focused. No excuses.';
@@ -1075,7 +1072,7 @@ function CoachScreen({setScreen,user}){
   );
 }
 
-function NutritionScreen({setScreen,user,profile,setProfile}){
+function NutritionScreen({setScreen,user,profile,setProfile,coachPrompt}){
   const [meals,setMeals]=useState([]);
   const [loading,setLoading]=useState(true);
   const [adding,setAdding]=useState(false);
@@ -1114,7 +1111,7 @@ function NutritionScreen({setScreen,user,profile,setProfile}){
       const res=await fetch(SB_URL+'/functions/v1/Coach-Skelly',{
         method:'POST',
         headers:{'Content-Type':'application/json','Authorization':'Bearer '+SB_ANON,'apikey':SB_ANON},
-        body:JSON.stringify({message:msg})
+        body:JSON.stringify({message:msg,systemPrompt:coachPrompt||undefined})
       });
       const data=await res.json();
       const text=(data.reply||'{}').replace(/```json|```/g,'').trim();
@@ -1140,7 +1137,7 @@ function NutritionScreen({setScreen,user,profile,setProfile}){
       const res=await fetch(SB_URL+'/functions/v1/Coach-Skelly',{
         method:'POST',
         headers:{'Content-Type':'application/json','Authorization':'Bearer '+SB_ANON,'apikey':SB_ANON},
-        body:JSON.stringify({message:msg})
+        body:JSON.stringify({message:msg,systemPrompt:coachPrompt||undefined})
       });
       const data=await res.json();
       const text=(data.reply||'{}').replace(/```json|```/g,'').trim();
@@ -1190,7 +1187,7 @@ function NutritionScreen({setScreen,user,profile,setProfile}){
       const res=await fetch(SB_URL+'/functions/v1/Coach-Skelly',{
         method:'POST',
         headers:{'Content-Type':'application/json','Authorization':'Bearer '+SB_ANON,'apikey':SB_ANON},
-        body:JSON.stringify({message:msg})
+        body:JSON.stringify({message:msg,systemPrompt:coachPrompt||undefined})
       });
       const data=await res.json();
       const text=(data.reply||'{}').replace(/```json|```/g,'').trim();
@@ -1755,7 +1752,277 @@ function ProfileScreen({setScreen,user,profile,setProfile}){
     h('div',{style:{fontSize:11,color:C.silverDim,fontWeight:700,letterSpacing:1,marginBottom:6}},'YOUR NAME'),
     h('input',{value:name,onChange:e=>setName(e.target.value),placeholder:'Your name',style:{width:'100%',padding:'14px 16px',borderRadius:12,fontSize:15,background:C.navyLight,border:'1.5px solid #2A3447',color:C.silverBright,outline:'none',boxSizing:'border-box',marginBottom:12}}),
     h('button',{onClick:saveName,disabled:saving,className:'btn',style:{width:'100%',padding:'14px 0',background:saved?C.success:'linear-gradient(135deg,#1D4ED8,#3B82F6)',borderRadius:12,color:'#fff',fontSize:14,fontWeight:800,marginBottom:28}},saved?'✓ Saved':(saving?'Saving...':'SAVE NAME')),
+    profile?.is_admin&&h('button',{onClick:()=>setScreen(S.TRAINER),className:'btn',style:{width:'100%',padding:'14px 0',marginBottom:12,background:'linear-gradient(135deg,#1D4ED8,#3B82F6)',borderRadius:12,color:'#fff',fontSize:14,fontWeight:800}},'🛠️ Trainer Dashboard'),
     h('button',{onClick:signOut,className:'btn',style:{width:'100%',padding:'14px 0',background:'transparent',border:'1px solid #EF444460',borderRadius:12,color:C.danger,fontSize:14,fontWeight:700}},'Sign Out')
+  );
+}
+
+function WorkoutsAdminTab({workouts,loadWorkouts}){
+  const [editing,setEditing]=useState(null);
+  const [form,setForm]=useState({});
+  const [uploading,setUploading]=useState(false);
+  const [saving,setSaving]=useState(false);
+  const fileRef=useRef(null);
+  const TYPES=['Stretch','Pilates','Flexibility','Conditioning','Strength'];
+
+  const startEdit=(w)=>{
+    setEditing(w?w.id:'new');
+    setForm(w?{...w,primary:(w.primary||[]).join(', '),secondary:(w.secondary||[]).join(', ')}:{name:'',duration:'',type:'Stretch',sets:'',primary:'',secondary:'',tip:'',why:'',media_url:''});
+  };
+
+  const uploadMedia=async(e)=>{
+    const file=e.target.files[0];if(!file)return;
+    setUploading(true);
+    try{
+      const ext=file.name.split('.').pop();
+      const path=(editing==='new'?'new-'+Date.now():editing)+'/media.'+ext;
+      const{error:upErr}=await sb.storage.from('workout-media').upload(path,file,{upsert:true,contentType:file.type});
+      if(upErr)throw upErr;
+      const{data}=sb.storage.from('workout-media').getPublicUrl(path);
+      setForm(f=>({...f,media_url:data.publicUrl+'?t='+Date.now()}));
+    }catch(err){alert('Upload failed. Try again.');}
+    setUploading(false);
+  };
+
+  const save=async()=>{
+    setSaving(true);
+    const payload={
+      name:form.name,duration:form.duration,type:form.type,sets:form.sets,
+      primary_muscles:form.primary.split(',').map(s=>s.trim()).filter(Boolean),
+      secondary_muscles:form.secondary.split(',').map(s=>s.trim()).filter(Boolean),
+      tip:form.tip,why:form.why,media_url:form.media_url||null
+    };
+    if(editing==='new'){
+      const{data:maxRow}=await sb.from('workouts').select('id').order('id',{ascending:false}).limit(1).maybeSingle();
+      const nextId=(maxRow?.id||0)+1;
+      await sb.from('workouts').insert({id:nextId,...payload});
+    }else{
+      await sb.from('workouts').update(payload).eq('id',editing);
+    }
+    await loadWorkouts();
+    setEditing(null);
+    setSaving(false);
+  };
+
+  const remove=async(id)=>{
+    await sb.from('workouts').delete().eq('id',id);
+    await loadWorkouts();
+    setEditing(null);
+  };
+
+  const inp={width:'100%',padding:'10px 12px',borderRadius:10,fontSize:13,background:C.navy,border:'1.5px solid #2A3447',color:C.silverBright,outline:'none',boxSizing:'border-box',marginBottom:8};
+
+  if(editing){
+    return h('div',{style:{padding:'0 24px'}},
+      h('div',{style:{background:C.navyLight,borderRadius:14,padding:16,border:'1px solid #2A3447'}},
+        h('div',{style:{fontSize:13,fontWeight:800,color:C.silverBright,marginBottom:12}},editing==='new'?'New Exercise':'Edit Exercise'),
+        form.media_url&&h('img',{src:form.media_url,style:{width:'100%',height:140,objectFit:'cover',borderRadius:10,marginBottom:10}}),
+        h('button',{onClick:()=>fileRef.current&&fileRef.current.click(),disabled:uploading,className:'btn',style:{width:'100%',padding:'10px 0',background:C.navy,border:'1px solid #2A3447',borderRadius:10,color:C.blue,fontSize:12,fontWeight:700,marginBottom:10}},uploading?'Uploading...':(form.media_url?'Change Photo/GIF':'Add Photo/GIF of Coach Skelly')),
+        h('input',{ref:fileRef,type:'file',accept:'image/*,image/gif',style:{display:'none'},onChange:uploadMedia}),
+        h('div',{style:{fontSize:10,color:C.silverDim,marginBottom:4}},'NAME'),
+        h('input',{value:form.name,onChange:e=>setForm(f=>({...f,name:e.target.value})),style:inp}),
+        h('div',{style:{fontSize:10,color:C.silverDim,marginBottom:4}},'TYPE'),
+        h('div',{style:{display:'flex',flexWrap:'wrap',gap:6,marginBottom:10}},
+          TYPES.map(t=>h('button',{key:t,onClick:()=>setForm(f=>({...f,type:t})),className:'btn',style:{padding:'6px 12px',borderRadius:16,fontSize:11,fontWeight:700,background:form.type===t?C.blue:C.navy,color:form.type===t?'#fff':C.silverDim,border:'1px solid '+(form.type===t?C.blue:'#2A3447')}},t))
+        ),
+        h('div',{style:{fontSize:10,color:C.silverDim,marginBottom:4}},'DURATION (e.g. 3 min)'),
+        h('input',{value:form.duration,onChange:e=>setForm(f=>({...f,duration:e.target.value})),style:inp}),
+        h('div',{style:{fontSize:10,color:C.silverDim,marginBottom:4}},'SETS (e.g. 3 x 15 reps)'),
+        h('input',{value:form.sets,onChange:e=>setForm(f=>({...f,sets:e.target.value})),style:inp}),
+        h('div',{style:{fontSize:10,color:C.silverDim,marginBottom:4}},'PRIMARY MUSCLES (comma separated)'),
+        h('input',{value:form.primary,onChange:e=>setForm(f=>({...f,primary:e.target.value})),style:inp}),
+        h('div',{style:{fontSize:10,color:C.silverDim,marginBottom:4}},'SECONDARY MUSCLES (comma separated)'),
+        h('input',{value:form.secondary,onChange:e=>setForm(f=>({...f,secondary:e.target.value})),style:inp}),
+        h('div',{style:{fontSize:10,color:C.silverDim,marginBottom:4}},'FORM TIP'),
+        h('input',{value:form.tip,onChange:e=>setForm(f=>({...f,tip:e.target.value})),style:inp}),
+        h('div',{style:{fontSize:10,color:C.silverDim,marginBottom:4}},'WHY THIS EXERCISE'),
+        h('input',{value:form.why,onChange:e=>setForm(f=>({...f,why:e.target.value})),style:inp}),
+        h('div',{style:{display:'flex',gap:10,marginTop:6}},
+          h('button',{onClick:save,disabled:saving||!form.name,className:'btn',style:{flex:1,padding:'12px 0',background:'linear-gradient(135deg,#1D4ED8,#3B82F6)',borderRadius:10,color:'#fff',fontSize:13,fontWeight:700}},saving?'Saving...':'SAVE'),
+          h('button',{onClick:()=>setEditing(null),className:'btn',style:{padding:'12px 16px',background:C.border,borderRadius:10,color:C.silverDim,fontSize:13}},'Cancel'),
+          editing!=='new'&&h('button',{onClick:()=>remove(editing),className:'btn',style:{padding:'12px 16px',background:'#EF444420',border:'1px solid #EF444460',borderRadius:10,color:C.danger,fontSize:13}},'Delete')
+        )
+      )
+    );
+  }
+
+  return h('div',{style:{padding:'0 24px'}},
+    h('button',{onClick:()=>startEdit(null),className:'btn',style:{width:'100%',padding:'14px',marginBottom:14,background:'linear-gradient(135deg,#1D4ED8,#3B82F6)',borderRadius:12,color:'#fff',fontSize:13,fontWeight:800}},'+ ADD NEW EXERCISE'),
+    h('div',{style:{display:'flex',flexDirection:'column',gap:8}},
+      workouts.map(w=>h('button',{key:w.id,onClick:()=>startEdit(w),className:'btn',style:{background:C.navyLight,borderRadius:12,padding:'12px 14px',border:'1px solid #2A3447',textAlign:'left',display:'flex',alignItems:'center',gap:12,width:'100%'}},
+        w.media_url?h('img',{src:w.media_url,style:{width:36,height:36,borderRadius:8,objectFit:'cover',flexShrink:0}}):h('div',{style:{width:36,height:36,borderRadius:8,background:C.border,flexShrink:0}}),
+        h('div',{style:{flex:1}},
+          h('div',{style:{fontSize:13,fontWeight:700,color:C.silverBright}},w.name),
+          h('div',{style:{fontSize:11,color:C.silverDim}},w.type+' - '+w.duration)
+        )
+      ))
+    )
+  );
+}
+
+function NonnegAdminTab({onSaved}){
+  const [tiers,setTiers]=useState({});
+  const [loading,setLoading]=useState(true);
+  const [saving,setSaving]=useState(false);
+  const [activeTier,setActiveTier]=useState(1);
+
+  useEffect(()=>{
+    sb.from('nonneg_tiers').select('*').order('tier',{ascending:true}).then(({data})=>{
+      const obj={};
+      (data||[]).forEach(row=>{obj[row.tier]=row.items;});
+      setTiers(obj);
+      setLoading(false);
+    });
+  },[]);
+
+  const items=tiers[activeTier]||[];
+
+  const updateItem=(idx,field,value)=>{
+    const newItems=items.map((it,i)=>i===idx?{...it,[field]:value}:it);
+    setTiers(t=>({...t,[activeTier]:newItems}));
+  };
+
+  const removeItem=(idx)=>{
+    setTiers(t=>({...t,[activeTier]:items.filter((_,i)=>i!==idx)}));
+  };
+
+  const addItem=()=>{
+    setTiers(t=>({...t,[activeTier]:[...items,{id:'item'+Date.now(),label:'New Item',target:10}]}));
+  };
+
+  const save=async()=>{
+    setSaving(true);
+    await sb.from('nonneg_tiers').update({items:tiers[activeTier]}).eq('tier',activeTier);
+    if(onSaved)await onSaved();
+    setSaving(false);
+  };
+
+  if(loading)return h('div',{style:{padding:'0 24px',color:C.silverDim,fontSize:13}},'Loading...');
+
+  const inp={padding:'8px 10px',borderRadius:8,fontSize:12,background:C.navy,border:'1.5px solid #2A3447',color:C.silverBright,outline:'none'};
+
+  return h('div',{style:{padding:'0 24px'}},
+    h('div',{style:{display:'flex',gap:8,marginBottom:16}},
+      [1,2,3].map(t=>h('button',{key:t,onClick:()=>setActiveTier(t),className:'btn',style:{flex:1,padding:'10px 0',borderRadius:10,fontSize:12,fontWeight:800,background:activeTier===t?C.blue:C.navyLight,color:activeTier===t?'#fff':C.silverDim,border:'1px solid '+(activeTier===t?C.blue:'#2A3447')}},'Tier '+t))
+    ),
+    h('div',{style:{display:'flex',flexDirection:'column',gap:8,marginBottom:14}},
+      items.map((it,idx)=>h('div',{key:idx,style:{background:C.navyLight,borderRadius:12,padding:12,border:'1px solid #2A3447',display:'flex',gap:8,alignItems:'center'}},
+        h('input',{value:it.label,onChange:e=>updateItem(idx,'label',e.target.value),style:{...inp,flex:1}}),
+        h('input',{value:it.target,onChange:e=>updateItem(idx,'target',parseInt(e.target.value)||0),type:'number',style:{...inp,width:60}}),
+        h('button',{onClick:()=>removeItem(idx),className:'btn',style:{width:28,height:28,borderRadius:8,background:'#EF444420',color:C.danger,fontSize:14,fontWeight:800}},'✕')
+      ))
+    ),
+    h('button',{onClick:addItem,className:'btn',style:{width:'100%',padding:'10px 0',marginBottom:14,background:C.navyLight,border:'1px solid #2A3447',borderRadius:10,color:C.silverDim,fontSize:12,fontWeight:700}},'+ Add Item'),
+    h('button',{onClick:save,disabled:saving,className:'btn',style:{width:'100%',padding:'14px 0',background:'linear-gradient(135deg,#1D4ED8,#3B82F6)',borderRadius:12,color:'#fff',fontSize:13,fontWeight:800}},saving?'Saving...':'SAVE TIER '+activeTier)
+  );
+}
+
+function CoachAdminTab({onSaved}){
+  const [prompt,setPrompt]=useState('');
+  const [loading,setLoading]=useState(true);
+  const [saving,setSaving]=useState(false);
+  const [saved,setSaved]=useState(false);
+
+  useEffect(()=>{
+    sb.from('coach_settings').select('system_prompt').eq('id',1).maybeSingle().then(({data})=>{
+      setPrompt(data?.system_prompt||'');
+      setLoading(false);
+    });
+  },[]);
+
+  const save=async()=>{
+    setSaving(true);
+    await sb.from('coach_settings').update({system_prompt:prompt}).eq('id',1);
+    if(onSaved)await onSaved();
+    setSaving(false);
+    setSaved(true);
+    setTimeout(()=>setSaved(false),2000);
+  };
+
+  if(loading)return h('div',{style:{padding:'0 24px',color:C.silverDim,fontSize:13}},'Loading...');
+
+  return h('div',{style:{padding:'0 24px'}},
+    h('div',{style:{fontSize:12,color:C.silverDim,fontWeight:700,marginBottom:8}},"COACH SKELLY'S INSTRUCTIONS"),
+    h('textarea',{value:prompt,onChange:e=>setPrompt(e.target.value),rows:12,style:{width:'100%',padding:'12px 14px',borderRadius:12,fontSize:13,background:C.navyLight,border:'1.5px solid #2A3447',color:C.silverBright,outline:'none',boxSizing:'border-box',marginBottom:12,lineHeight:1.6,fontFamily:'inherit'}}),
+    h('button',{onClick:save,disabled:saving,className:'btn',style:{width:'100%',padding:'14px 0',background:saved?C.success:'linear-gradient(135deg,#1D4ED8,#3B82F6)',borderRadius:12,color:'#fff',fontSize:13,fontWeight:800}},saved?'✓ Saved':(saving?'Saving...':'SAVE INSTRUCTIONS')),
+    h('div',{style:{fontSize:11,color:C.silverDim,marginTop:10,textAlign:'center'}},'Changes apply instantly - no redeploy needed.')
+  );
+}
+
+function ClientsAdminTab(){
+  const [clients,setClients]=useState([]);
+  const [loading,setLoading]=useState(true);
+
+  useEffect(()=>{
+    sb.from('profiles').select('full_name,email,points,streak,phase,tier,is_paid,body_score,avatar_url').order('points',{ascending:false}).then(({data})=>{
+      setClients(data||[]);
+      setLoading(false);
+    });
+  },[]);
+
+  const paidCount=clients.filter(c=>c.is_paid).length;
+  const revenue=paidCount*5;
+
+  if(loading)return h('div',{style:{padding:'0 24px',color:C.silverDim,fontSize:13}},'Loading...');
+
+  return h('div',{style:{padding:'0 24px'}},
+    h('div',{style:{display:'flex',gap:10,marginBottom:16}},
+      h('div',{style:{flex:1,background:'#22C55E10',border:'1px solid #22C55E30',borderRadius:14,padding:14,textAlign:'center'}},
+        h('div',{style:{fontSize:20,fontWeight:900,color:C.success}},paidCount),
+        h('div',{style:{fontSize:11,color:C.silverDim}},'paid clients')
+      ),
+      h('div',{style:{flex:1,background:'#F59E0B10',border:'1px solid #F59E0B30',borderRadius:14,padding:14,textAlign:'center'}},
+        h('div',{style:{fontSize:20,fontWeight:900,color:C.warning}},'$'+revenue),
+        h('div',{style:{fontSize:11,color:C.silverDim}},'per week')
+      ),
+      h('div',{style:{flex:1,background:'#3B82F610',border:'1px solid #3B82F630',borderRadius:14,padding:14,textAlign:'center'}},
+        h('div',{style:{fontSize:20,fontWeight:900,color:C.blue}},clients.length),
+        h('div',{style:{fontSize:11,color:C.silverDim}},'total users')
+      )
+    ),
+    h('div',{style:{display:'flex',flexDirection:'column',gap:8}},
+      clients.map((c,i)=>h('div',{key:i,style:{background:C.navyLight,borderRadius:12,padding:'12px 14px',border:'1px solid #2A3447',display:'flex',alignItems:'center',gap:12}},
+        h('div',{style:{width:36,height:36,borderRadius:'50%',background:C.border,overflow:'hidden',flexShrink:0}},
+          c.avatar_url&&h('img',{src:c.avatar_url,style:{width:'100%',height:'100%',objectFit:'cover'}})
+        ),
+        h('div',{style:{flex:1}},
+          h('div',{style:{fontSize:13,fontWeight:700,color:C.silverBright}},c.full_name||'Athlete'),
+          h('div',{style:{fontSize:10,color:C.silverDim}},'Phase '+(c.phase||1)+' - Tier '+(c.tier||1)+(c.body_score?' - Score '+c.body_score:''))
+        ),
+        h('div',{style:{textAlign:'right'}},
+          h('div',{style:{fontSize:13,fontWeight:800,color:c.is_paid?C.success:C.silverDim}},c.is_paid?'PAID':'unpaid'),
+          h('div',{style:{fontSize:10,color:C.silverDim}},(c.points||0)+' pts')
+        )
+      ))
+    )
+  );
+}
+
+function TrainerDashboard({setScreen,user,profile,workouts,loadWorkouts,loadNonnegTiers,loadCoachPrompt}){
+  const [tab,setTab]=useState('workouts');
+
+  if(!profile?.is_admin){
+    return h('div',{style:{minHeight:'100vh',background:C.navy,padding:'54px 24px',textAlign:'center'}},
+      h('div',{style:{fontSize:14,color:C.silverDim,marginBottom:16}},"You don't have access to this page."),
+      h('button',{onClick:()=>setScreen(S.DASH),className:'btn',style:{padding:'12px 24px',background:C.blue,borderRadius:10,color:'#fff',fontSize:13,fontWeight:700}},'Back to Home')
+    );
+  }
+
+  const TABS=[{id:'workouts',label:'Workouts'},{id:'nonneg',label:'Non-Neg'},{id:'coach',label:'Coach'},{id:'clients',label:'Clients'}];
+
+  return h('div',{style:{minHeight:'100vh',background:C.navy,padding:'54px 0 100px'}},
+    h('div',{style:{padding:'0 24px'}},
+      h('button',{onClick:()=>setScreen(S.PROFILE),className:'btn',style:{background:'none',color:C.blue,fontSize:13,fontWeight:700,marginBottom:16,padding:0}},'Back to Profile'),
+      h('div',{style:{fontSize:11,color:C.blue,fontWeight:700,letterSpacing:2,marginBottom:4}},'ADMIN'),
+      h('div',{style:{fontSize:26,fontWeight:900,color:C.silverBright,marginBottom:20}},'Trainer Dashboard'),
+      h('div',{style:{display:'flex',gap:6,marginBottom:20,overflowX:'auto'}},
+        TABS.map(t=>h('button',{key:t.id,onClick:()=>setTab(t.id),className:'btn',style:{padding:'10px 16px',borderRadius:10,fontSize:12,fontWeight:800,flexShrink:0,background:tab===t.id?C.blue:C.navyLight,color:tab===t.id?'#fff':C.silverDim,border:'1px solid '+(tab===t.id?C.blue:'#2A3447')}},t.label))
+      )
+    ),
+    tab==='workouts'&&h(WorkoutsAdminTab,{workouts,loadWorkouts}),
+    tab==='nonneg'&&h(NonnegAdminTab,{onSaved:loadNonnegTiers}),
+    tab==='coach'&&h(CoachAdminTab,{onSaved:loadCoachPrompt}),
+    tab==='clients'&&h(ClientsAdminTab,{})
   );
 }
 
@@ -1765,6 +2032,8 @@ function App(){
   const [profile,setProfile]=useState(null);
   const [ex,setEx]=useState(null);
   const [workouts,setWorkouts]=useState([]);
+  const [nonnegTiers,setNonnegTiers]=useState(NONNEG_TIERS);
+  const [coachPrompt,setCoachPrompt]=useState('');
 
   const loadProfile=async(id)=>{
     const{data}=await sb.from('profiles').select('*').eq('id',id).maybeSingle();
@@ -1775,12 +2044,28 @@ function App(){
   const loadWorkouts=async()=>{
     const{data}=await sb.from('workouts').select('*').order('id',{ascending:true});
     if(data){
-      setWorkouts(data.map(w=>({id:w.id,name:w.name,duration:w.duration,type:w.type,sets:w.sets,primary:w.primary_muscles||[],secondary:w.secondary_muscles||[],tip:w.tip,why:w.why})));
+      setWorkouts(data.map(w=>({id:w.id,name:w.name,duration:w.duration,type:w.type,sets:w.sets,primary:w.primary_muscles||[],secondary:w.secondary_muscles||[],tip:w.tip,why:w.why,media_url:w.media_url||null})));
     }
+  };
+
+  const loadNonnegTiers=async()=>{
+    const{data}=await sb.from('nonneg_tiers').select('*').order('tier',{ascending:true});
+    if(data&&data.length>0){
+      const obj={};
+      data.forEach(row=>{obj[row.tier]=row.items;});
+      setNonnegTiers(obj);
+    }
+  };
+
+  const loadCoachPrompt=async()=>{
+    const{data}=await sb.from('coach_settings').select('system_prompt').eq('id',1).maybeSingle();
+    if(data?.system_prompt)setCoachPrompt(data.system_prompt);
   };
 
   useEffect(()=>{
     loadWorkouts();
+    loadNonnegTiers();
+    loadCoachPrompt();
     sb.auth.getSession().then(async({data:{session}})=>{
       if(session?.user){
         setUser(session.user);
@@ -1807,14 +2092,15 @@ function App(){
       case S.WELCOME:return h(WelcomeScreen,{setScreen});
       case S.ONBOARDING:return h(OnboardingFlow,{setScreen,user,setProfile});
       case S.PAYMENT:return h(PaymentScreen,{setScreen,user,profile,setProfile});
-      case S.DASH:return h(DashScreen,{setScreen,user,profile,setProfile});
-      case S.WORKOUT:return h(WorkoutScreen,{setScreen,setEx,profile,user,setProfile,workouts});
+      case S.DASH:return h(DashScreen,{setScreen,user,profile,setProfile,nonnegTiers});
+      case S.WORKOUT:return h(WorkoutScreen,{setScreen,setEx,profile,user,setProfile,workouts,coachPrompt});
       case S.EXERCISE:return h(ExerciseScreen,{setScreen,exercise:ex,user,profile,setProfile});
-      case S.COACH:return h(CoachScreen,{setScreen,user});
-      case S.NUTRITION:return h(NutritionScreen,{setScreen,user,profile,setProfile});
+      case S.COACH:return h(CoachScreen,{setScreen,user,coachPrompt});
+      case S.NUTRITION:return h(NutritionScreen,{setScreen,user,profile,setProfile,coachPrompt});
       case S.PROGRESS:return h(ProgressScreen,{setScreen,user,profile,setProfile});
       case S.LEADERBOARD:return h(LeaderboardScreen,{setScreen,profile});
       case S.PROFILE:return h(ProfileScreen,{setScreen,user,profile,setProfile});
+      case S.TRAINER:return h(TrainerDashboard,{setScreen,user,profile,workouts,loadWorkouts,loadNonnegTiers,loadCoachPrompt});
       default:return null;
     }
   };
