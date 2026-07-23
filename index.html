@@ -493,10 +493,12 @@ function DashScreen({setScreen,user,profile,setProfile,nonnegTiers}){
     let totalPenalty=0;
     const updates={};
 
+    let resetStreak=false;
+
     if(!(yLog&&yLog.penalty_applied)){
       const doneY=yLog?.nonneg_completed?Object.values(yLog.nonneg_completed).filter(Boolean).length:0;
       const missed=NONNEG.length-doneY;
-      if(missed>0)totalPenalty+=missed*5;
+      if(missed>0){totalPenalty+=missed*5;resetStreak=true;}
       updates.penalty_applied=true;
     }
 
@@ -521,12 +523,14 @@ function DashScreen({setScreen,user,profile,setProfile,nonnegTiers}){
       updates.discipline_penalty_applied=true;
     }
 
-    if(totalPenalty>0){
-      const{data:freshProfile}=await sb.from('profiles').select('points').eq('id',user.id).maybeSingle();
+    if(totalPenalty>0||resetStreak){
+      const{data:freshProfile}=await sb.from('profiles').select('points,streak').eq('id',user.id).maybeSingle();
       const basePoints=freshProfile?.points??(profile?.points||0);
       const np=Math.max(0,basePoints-totalPenalty);
-      await sb.from('profiles').update({points:np}).eq('id',user.id);
-      setProfile(p=>({...p,points:np}));
+      const updatePayload={points:np};
+      if(resetStreak)updatePayload.streak=0;
+      await sb.from('profiles').update(updatePayload).eq('id',user.id);
+      setProfile(p=>({...p,points:np,...(resetStreak?{streak:0}:{})}));
     }
 
     if(Object.keys(updates).length>0){
@@ -1954,21 +1958,139 @@ function CoachAdminTab({onSaved}){
   );
 }
 
-function ClientsAdminTab(){
-  const [clients,setClients]=useState([]);
+function ClientWorkoutEditor({client,workouts,onClose}){
+  const DAY_KEYS=['mon','tue','wed','thu','fri','sat','sun'];
+  const DAY_LABELS={mon:'Mon',tue:'Tue',wed:'Wed',thu:'Thu',fri:'Fri',sat:'Sat',sun:'Sun'};
+  const PHASE1_TYPES=['Stretch','Pilates','Conditioning'];
+  const phase1Workouts=workouts.filter(w=>PHASE1_TYPES.includes(w.type));
+  const [plan,setPlan]=useState({mon:{picks:[],reason:''},tue:{picks:[],reason:''},wed:{picks:[],reason:''},thu:{picks:[],reason:''},fri:{picks:[],reason:''},sat:{picks:[],reason:''},sun:{picks:[],reason:''}});
+  const [selectedDay,setSelectedDay]=useState('mon');
   const [loading,setLoading]=useState(true);
+  const [saving,setSaving]=useState(false);
+  const [askingAI,setAskingAI]=useState(false);
+  const [priority,setPriority]=useState('');
+  const [clientProfile,setClientProfile]=useState(null);
 
   useEffect(()=>{
-    sb.from('profiles').select('full_name,email,points,streak,phase,tier,is_paid,body_score,avatar_url').order('points',{ascending:false}).then(({data})=>{
-      setClients(data||[]);
+    sb.from('profiles').select('weekly_plan,pain_areas,goal,nutrition_goal,body_score,phase,tier').eq('id',client.id).maybeSingle().then(({data})=>{
+      if(data?.weekly_plan)setPlan(data.weekly_plan);
+      setClientProfile(data);
       setLoading(false);
     });
   },[]);
+
+  const getMonday=()=>{
+    const d=new Date();
+    const day=d.getDay();
+    const diff=day===0?-6:1-day;
+    const monday=new Date(d);
+    monday.setDate(d.getDate()+diff);
+    return monday.getFullYear()+'-'+String(monday.getMonth()+1).padStart(2,'0')+'-'+String(monday.getDate()).padStart(2,'0');
+  };
+
+  const togglePick=(name)=>{
+    setPlan(p=>{
+      const current=p[selectedDay]?.picks||[];
+      const has=current.includes(name);
+      return {...p,[selectedDay]:{...p[selectedDay],picks:has?current.filter(n=>n!==name):[...current,name]}};
+    });
+  };
+
+  const askAI=async()=>{
+    setAskingAI(true);
+    const list=phase1Workouts.map(w=>w.name+' ('+w.type+')').join(', ');
+    const painAreas=(clientProfile?.pain_areas||[]).join(', ')||'none listed';
+    const msg='Build a 7-day workout plan (Monday through Sunday) for a Phase '+(clientProfile?.phase||1)+' client using ONLY exercises from this list: '+list+
+      '. Each day needs exactly 10 exercises: 3 Stretch, 4 Pilates, 3 Conditioning. You may reuse exercises across different days.'+
+      ' Known pain areas: '+painAreas+
+      (clientProfile?.body_score?'. Current body score: '+clientProfile.body_score+'/100':'')+
+      '. Trainer wants to prioritize: '+(priority||'general Phase 1 restoration')+
+      '. Respond with ONLY JSON, no other text, in this exact shape: {"mon":{"picks":["Exact Name",...],"reason":"short sentence"},"tue":{...},"wed":{...},"thu":{...},"fri":{...},"sat":{...},"sun":{...}}';
+    try{
+      const res=await fetch(SB_URL+'/functions/v1/Coach-Skelly',{
+        method:'POST',
+        headers:{'Content-Type':'application/json','Authorization':'Bearer '+SB_ANON,'apikey':SB_ANON},
+        body:JSON.stringify({message:msg})
+      });
+      const data=await res.json();
+      const text=(data.reply||'{}').replace(/```json|```/g,'').trim();
+      const parsed=JSON.parse(text);
+      setPlan(parsed);
+    }catch(e){
+      alert("Couldn't reach Skelly. Try again.");
+    }
+    setAskingAI(false);
+  };
+
+  const save=async()=>{
+    setSaving(true);
+    await sb.from('profiles').update({weekly_plan:plan,weekly_plan_week_start:getMonday()}).eq('id',client.id);
+    setSaving(false);
+    onClose();
+  };
+
+  if(loading)return h('div',{style:{padding:'0 24px',color:C.silverDim,fontSize:13}},'Loading...');
+
+  const dayPlan=plan[selectedDay]||{picks:[],reason:''};
+
+  return h('div',{style:{padding:'0 24px'}},
+    h('button',{onClick:onClose,className:'btn',style:{background:'none',color:C.blue,fontSize:13,fontWeight:700,marginBottom:14,padding:0}},'← Back to Clients'),
+    h('div',{style:{fontSize:16,fontWeight:800,color:C.silverBright,marginBottom:4}},client.full_name||'Athlete'+"'s Plan"),
+    h('div',{style:{fontSize:11,color:C.silverDim,marginBottom:14}},'Phase '+(clientProfile?.phase||1)+' - Tier '+(clientProfile?.tier||1)),
+    h('div',{style:{background:C.navyLight,borderRadius:14,padding:14,border:'1px solid #3B82F640',marginBottom:14}},
+      h('div',{style:{fontSize:11,color:C.blue,fontWeight:700,marginBottom:8}},'ASK AI TO SUGGEST A STARTING PLAN'),
+      h('input',{value:priority,onChange:e=>setPriority(e.target.value),placeholder:'e.g. focus on hip mobility this week',style:{width:'100%',padding:'10px 12px',borderRadius:10,fontSize:12,background:C.navy,border:'1.5px solid #2A3447',color:C.silverBright,outline:'none',boxSizing:'border-box',marginBottom:10}}),
+      h('button',{onClick:askAI,disabled:askingAI,className:'btn',style:{width:'100%',padding:'10px 0',background:'linear-gradient(135deg,#1D4ED8,#3B82F6)',borderRadius:10,color:'#fff',fontSize:12,fontWeight:800}},askingAI?'Thinking...':'💀 TALK TO AI')
+    ),
+    h('div',{style:{display:'flex',gap:6,marginBottom:14,overflowX:'auto'}},
+      DAY_KEYS.map(dk=>h('button',{key:dk,onClick:()=>setSelectedDay(dk),className:'btn',style:{padding:'8px 12px',borderRadius:10,fontSize:11,fontWeight:800,flexShrink:0,background:selectedDay===dk?C.blue:C.navyLight,color:selectedDay===dk?'#fff':C.silverDim,border:'1px solid '+(selectedDay===dk?C.blue:'#2A3447')}},DAY_LABELS[dk]+' ('+(plan[dk]?.picks?.length||0)+')'))
+    ),
+    dayPlan.reason&&h('div',{style:{fontSize:11,color:C.silverDim,marginBottom:10,fontStyle:'italic'}},dayPlan.reason),
+    h('div',{style:{fontSize:11,color:C.silverDim,fontWeight:700,marginBottom:8}},'TAP TO ADD/REMOVE FROM '+DAY_LABELS[selectedDay].toUpperCase()),
+    h('div',{style:{display:'flex',flexDirection:'column',gap:6,marginBottom:16}},
+      phase1Workouts.map(w=>{
+        const included=dayPlan.picks.includes(w.name);
+        return h('button',{key:w.id,onClick:()=>togglePick(w.name),className:'btn',style:{background:included?'#22C55E15':C.navyLight,border:'1px solid '+(included?'#22C55E60':'#2A3447'),borderRadius:10,padding:'10px 12px',display:'flex',alignItems:'center',gap:10,textAlign:'left',width:'100%'}},
+          h('div',{style:{width:20,height:20,borderRadius:'50%',flexShrink:0,background:included?C.success:C.border,display:'flex',alignItems:'center',justifyContent:'center',fontSize:10,color:'#fff',fontWeight:800}},included?'✓':''),
+          h('div',{style:{flex:1,fontSize:12,fontWeight:700,color:included?C.silverBright:C.silverDim}},w.name),
+          h('div',{style:{fontSize:10,color:C.silverDim}},w.type)
+        );
+      })
+    ),
+    h('button',{onClick:save,disabled:saving,className:'btn',style:{width:'100%',padding:'14px 0',background:'linear-gradient(135deg,#1D4ED8,#3B82F6)',borderRadius:12,color:'#fff',fontSize:13,fontWeight:800}},saving?'Saving...':'SAVE PLAN FOR '+(client.full_name||'CLIENT').toUpperCase())
+  );
+}
+
+function ClientsAdminTab({workouts}){
+  const [clients,setClients]=useState([]);
+  const [loading,setLoading]=useState(true);
+  const [savingId,setSavingId]=useState(null);
+  const [editingClient,setEditingClient]=useState(null);
+
+  const loadClients=()=>{
+    sb.from('profiles').select('id,full_name,email,points,streak,phase,tier,is_paid,body_score,avatar_url').order('points',{ascending:false}).then(({data})=>{
+      setClients(data||[]);
+      setLoading(false);
+    });
+  };
+
+  useEffect(()=>{loadClients();},[]);
+
+  const changeTier=async(clientId,newTier)=>{
+    setSavingId(clientId);
+    await sb.from('profiles').update({tier:newTier,streak:0}).eq('id',clientId);
+    setClients(cs=>cs.map(c=>c.id===clientId?{...c,tier:newTier,streak:0}:c));
+    setSavingId(null);
+  };
 
   const paidCount=clients.filter(c=>c.is_paid).length;
   const revenue=paidCount*5;
 
   if(loading)return h('div',{style:{padding:'0 24px',color:C.silverDim,fontSize:13}},'Loading...');
+
+  if(editingClient){
+    return h(ClientWorkoutEditor,{client:editingClient,workouts,onClose:()=>setEditingClient(null)});
+  }
 
   return h('div',{style:{padding:'0 24px'}},
     h('div',{style:{display:'flex',gap:10,marginBottom:16}},
@@ -1986,18 +2108,26 @@ function ClientsAdminTab(){
       )
     ),
     h('div',{style:{display:'flex',flexDirection:'column',gap:8}},
-      clients.map((c,i)=>h('div',{key:i,style:{background:C.navyLight,borderRadius:12,padding:'12px 14px',border:'1px solid #2A3447',display:'flex',alignItems:'center',gap:12}},
-        h('div',{style:{width:36,height:36,borderRadius:'50%',background:C.border,overflow:'hidden',flexShrink:0}},
-          c.avatar_url&&h('img',{src:c.avatar_url,style:{width:'100%',height:'100%',objectFit:'cover'}})
+      clients.map((c,i)=>h('div',{key:i,style:{background:C.navyLight,borderRadius:12,padding:'12px 14px',border:'1px solid '+(c.streak>=10?'#22C55E60':'#2A3447')}},
+        h('div',{style:{display:'flex',alignItems:'center',gap:12,marginBottom:c.streak>=10?10:0}},
+          h('div',{style:{width:36,height:36,borderRadius:'50%',background:C.border,overflow:'hidden',flexShrink:0}},
+            c.avatar_url&&h('img',{src:c.avatar_url,style:{width:'100%',height:'100%',objectFit:'cover'}})
+          ),
+          h('div',{style:{flex:1}},
+            h('div',{style:{fontSize:13,fontWeight:700,color:C.silverBright}},c.full_name||'Athlete'),
+            h('div',{style:{fontSize:10,color:C.silverDim}},'Phase '+(c.phase||1)+' - Tier '+(c.tier||1)+(c.body_score?' - Score '+c.body_score:''))
+          ),
+          h('div',{style:{textAlign:'right'}},
+            h('div',{style:{fontSize:13,fontWeight:800,color:c.is_paid?C.success:C.silverDim}},c.is_paid?'PAID':'unpaid'),
+            h('div',{style:{fontSize:10,color:C.silverDim}},(c.points||0)+' pts - '+(c.streak||0)+'d streak')
+          )
         ),
-        h('div',{style:{flex:1}},
-          h('div',{style:{fontSize:13,fontWeight:700,color:C.silverBright}},c.full_name||'Athlete'),
-          h('div',{style:{fontSize:10,color:C.silverDim}},'Phase '+(c.phase||1)+' - Tier '+(c.tier||1)+(c.body_score?' - Score '+c.body_score:''))
+        c.streak>=10&&h('div',{style:{background:'#22C55E15',borderRadius:10,padding:'8px 10px',marginBottom:10,fontSize:11,color:C.success,fontWeight:700}},'🔥 '+(c.streak)+'-day streak - ready to level up'),
+        h('div',{style:{display:'flex',gap:6,alignItems:'center',marginBottom:8}},
+          h('div',{style:{fontSize:10,color:C.silverDim,marginRight:4}},'TIER:'),
+          [1,2,3].map(t=>h('button',{key:t,onClick:()=>changeTier(c.id,t),disabled:savingId===c.id,className:'btn',style:{flex:1,padding:'8px 0',borderRadius:8,fontSize:11,fontWeight:800,background:c.tier===t?C.blue:C.navy,color:c.tier===t?'#fff':C.silverDim,border:'1px solid '+(c.tier===t?C.blue:'#2A3447')}},'T'+t))
         ),
-        h('div',{style:{textAlign:'right'}},
-          h('div',{style:{fontSize:13,fontWeight:800,color:c.is_paid?C.success:C.silverDim}},c.is_paid?'PAID':'unpaid'),
-          h('div',{style:{fontSize:10,color:C.silverDim}},(c.points||0)+' pts')
-        )
+        h('button',{onClick:()=>setEditingClient(c),className:'btn',style:{width:'100%',padding:'10px 0',background:C.navy,border:'1px solid #2A3447',borderRadius:8,color:C.blue,fontSize:11,fontWeight:700}},'📋 Edit Workout Plan')
       ))
     )
   );
@@ -2027,7 +2157,7 @@ function TrainerDashboard({setScreen,user,profile,workouts,loadWorkouts,loadNonn
     tab==='workouts'&&h(WorkoutsAdminTab,{workouts,loadWorkouts}),
     tab==='nonneg'&&h(NonnegAdminTab,{onSaved:loadNonnegTiers}),
     tab==='coach'&&h(CoachAdminTab,{onSaved:loadCoachPrompt}),
-    tab==='clients'&&h(ClientsAdminTab,{})
+    tab==='clients'&&h(ClientsAdminTab,{workouts})
   );
 }
 
