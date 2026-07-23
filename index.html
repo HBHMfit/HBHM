@@ -786,6 +786,11 @@ function WorkoutScreen({setScreen,setEx,profile,user,setProfile,workouts,coachPr
         method:'POST',
         headers:{'Content-Type':'application/json','Authorization':'Bearer '+SB_ANON,'apikey':SB_ANON},
         body:JSON.stringify({message:msg,systemPrompt:coachPrompt||undefined})
+      });
+      const data=await res.json();
+      const text=(data.reply||'{}').replace(/```json|```/g,'').trim();
+      const parsed=JSON.parse(text);
+      await sb.from('profiles').update({weekly_plan:parsed,weekly_plan_week_start:thisMonday}).eq('id',user.id);
       setProfile(p=>({...p,weekly_plan:parsed,weekly_plan_week_start:thisMonday}));
       setBuildingWeek(false);
     }catch(e){
