@@ -74,7 +74,7 @@ function getTierPlan(tier){
 
 const S={
   LOADING:'loading',AUTH:'auth',WELCOME:'welcome',
-  ONBOARDING:'onboarding',PAYMENT:'payment',
+  ONBOARDING:'onboarding',PAYMENT:'payment',ASSESSMENT:'assessment',
   DASH:'dash',WORKOUT:'workout',EXERCISE:'exercise',
   COACH:'coach',NUTRITION:'nutrition',PROGRESS:'progress',
   LEADERBOARD:'leaderboard',PROFILE:'profile',TRAINER:'trainer'
@@ -201,7 +201,7 @@ function AuthScreen({setScreen,setUser,setProfile}){
         setUser(data.user);
         const{data:prof}=await sb.from('profiles').select('*').eq('id',data.user.id).maybeSingle();
         if(prof)setProfile(prof);
-        setScreen(prof?.is_paid?S.DASH:S.PAYMENT);
+        setScreen(prof?.is_paid?(prof?.nonneg_items?S.DASH:S.ASSESSMENT):S.PAYMENT);
       }
     }catch(err){setError(err.message);}
     setLoading(false);
@@ -429,10 +429,10 @@ function PaymentScreen({setScreen,user,profile,setProfile}){
   const checkPayment=async()=>{
     if(!user)return;
     setChecking(true);
-    const{data}=await sb.from('profiles').select('is_paid').eq('id',user.id).maybeSingle();
+    const{data}=await sb.from('profiles').select('is_paid,nonneg_items').eq('id',user.id).maybeSingle();
     if(data?.is_paid){
       setProfile(p=>({...p,is_paid:true}));
-      setScreen(S.DASH);
+      setScreen(data?.nonneg_items?S.DASH:S.ASSESSMENT);
     }
     setChecking(false);
   };
@@ -470,10 +470,125 @@ function PaymentScreen({setScreen,user,profile,setProfile}){
   );
 }
 
+function AssessmentScreen({setScreen,user,profile,setProfile}){
+  const [step,setStep]=useState(0);
+  const [activityLevel,setActivityLevel]=useState('');
+  const [workoutTime,setWorkoutTime]=useState('');
+  const [wantFromProgram,setWantFromProgram]=useState('');
+  const [photo,setPhoto]=useState(null);
+  const [cameraOpen,setCameraOpen]=useState(false);
+  const [analyzing,setAnalyzing]=useState(false);
+  const [errMsg,setErrMsg]=useState('');
+  const fileRef=useRef(null);
+
+  const capturePhoto=(e)=>{
+    const file=e.target.files[0];if(!file)return;
+    const reader=new FileReader();
+    reader.onload=(ev)=>{setPhoto(ev.target.result.split(',')[1]);};
+    reader.readAsDataURL(file);
+    e.target.value='';
+  };
+
+  const runAssessment=async()=>{
+    setAnalyzing(true);setErrMsg('');
+    try{
+      let bodyNote='';
+      if(photo){
+        const res1=await fetch(SB_URL+'/functions/v1/rapid-handler',{
+          method:'POST',
+          headers:{'Content-Type':'application/json','Authorization':'Bearer '+SB_ANON,'apikey':SB_ANON},
+          body:JSON.stringify({type:'body',images:[photo],mediaType:'image/jpeg'})
+        });
+        const data1=await res1.json();
+        const text1=(data1.reply||'{}').replace(/```json|```/g,'').trim();
+        const parsed1=JSON.parse(text1);
+        bodyNote='Initial body assessment score: '+parsed1.score+'/100. '+(parsed1.overall||'');
+        await sb.from('profiles').update({body_score:parsed1.score,body_feedback:parsed1.overall,last_photo_date:getLocalDate()}).eq('id',user.id);
+      }
+      const defaultItems=NONNEG_TIERS[1];
+      const itemList=defaultItems.map(it=>it.id+' ('+it.label+')').join(', ');
+      const msg='A brand new client is starting Phase 1 of the HBHM fitness program. '+
+        'Their self-reported activity level: '+activityLevel+'. '+
+        'Time they can dedicate per workout: '+workoutTime+'. '+
+        'What they want from this program: '+wantFromProgram+'. '+
+        (bodyNote?bodyNote+'. ':'')+
+        'Set realistic, honest STARTING daily non-negotiable targets for someone at this level - do not assume they are already fit. If they are very out of shape, start low (like 5 push-ups), not the standard beginner numbers. Exercises: '+itemList+
+        '. Respond with ONLY JSON, no other text, mapping each exercise id to a starting number, like: {"pushups":5,"chinups":1,"pullups":1,"situps":10,"crunches":10,"vsits":5,"sideplanks":10,"calfraises":15,"squats":10}';
+      const res2=await fetch(SB_URL+'/functions/v1/Coach-Skelly',{
+        method:'POST',
+        headers:{'Content-Type':'application/json','Authorization':'Bearer '+SB_ANON,'apikey':SB_ANON},
+        body:JSON.stringify({message:msg})
+      });
+      const data2=await res2.json();
+      const text2=(data2.reply||'{}').replace(/```json|```/g,'').trim();
+      const targets=JSON.parse(text2);
+      const nonnegItems=defaultItems.map(it=>({id:it.id,label:it.label,target:targets[it.id]||it.target,unit:it.unit||null,increment:5}));
+      await sb.from('profiles').update({nonneg_items:nonnegItems,activity_level:activityLevel}).eq('id',user.id);
+      setProfile(p=>({...p,nonneg_items:nonnegItems,activity_level:activityLevel}));
+      setScreen(S.DASH);
+    }catch(e){
+      setErrMsg("Couldn't complete the assessment. Try again.");
+    }
+    setAnalyzing(false);
+  };
+
+  const inp={width:'100%',padding:'14px 16px',borderRadius:12,fontSize:14,background:C.navyLight,border:'1.5px solid #2A3447',color:C.silverBright,outline:'none',boxSizing:'border-box',marginBottom:12};
+  const canNext0=activityLevel!=='';
+  const canNext1=workoutTime!=='';
+  const canNext2=wantFromProgram.trim()!=='';
+
+  if(cameraOpen){
+    return h(CameraModal,{
+      onClose:()=>setCameraOpen(false),
+      onCapture:(base64)=>{setPhoto(base64);setCameraOpen(false);}
+    });
+  }
+
+  return h('div',{style:{minHeight:'100vh',background:C.navy,padding:'60px 24px 40px'}},
+    h('div',{style:{display:'flex',justifyContent:'center',marginBottom:20}},h(Avatar,{size:64,animate:true})),
+    h('div',{style:{fontSize:11,color:C.blue,fontWeight:700,letterSpacing:2,marginBottom:8,textAlign:'center'}},'INITIAL ASSESSMENT'),
+    h('div',{style:{fontSize:22,fontWeight:900,color:C.silverBright,marginBottom:20,textAlign:'center'}},"Let's see where you're actually at"),
+
+    step===0&&h('div',null,
+      h('div',{style:{fontSize:13,color:C.silver,marginBottom:14,textAlign:'center'}},"What's your physical activity like right now?"),
+      ['Sedentary - little to no exercise','Light activity - occasional movement','Moderately active - workout sometimes','Very active - train regularly'].map(opt=>h('button',{key:opt,onClick:()=>setActivityLevel(opt),className:'btn',style:{width:'100%',padding:'14px',marginBottom:10,borderRadius:12,textAlign:'left',fontSize:13,fontWeight:700,background:activityLevel===opt?'#3B82F620':C.navyLight,border:'1.5px solid '+(activityLevel===opt?C.blue:'#2A3447'),color:activityLevel===opt?C.silverBright:C.silverDim}},opt))
+    ),
+
+    step===1&&h('div',null,
+      h('div',{style:{fontSize:13,color:C.silver,marginBottom:14,textAlign:'center'}},'How much time can you dedicate per workout?'),
+      ['15-30 minutes','30-60 minutes','60-90 minutes','90+ minutes'].map(opt=>h('button',{key:opt,onClick:()=>setWorkoutTime(opt),className:'btn',style:{width:'100%',padding:'14px',marginBottom:10,borderRadius:12,textAlign:'left',fontSize:13,fontWeight:700,background:workoutTime===opt?'#3B82F620':C.navyLight,border:'1.5px solid '+(workoutTime===opt?C.blue:'#2A3447'),color:workoutTime===opt?C.silverBright:C.silverDim}},opt))
+    ),
+
+    step===2&&h('div',null,
+      h('div',{style:{fontSize:13,color:C.silver,marginBottom:14,textAlign:'center'}},'What do you want from this program?'),
+      h('textarea',{value:wantFromProgram,onChange:e=>setWantFromProgram(e.target.value),rows:4,placeholder:'e.g. lose weight, get back in shape before my kid is born, build discipline again...',style:{...inp,fontFamily:'inherit'}})
+    ),
+
+    step===3&&h('div',null,
+      h('div',{style:{fontSize:13,color:C.silver,marginBottom:14,textAlign:'center'}},'Optional: take a body photo so Coach Skelly can see where you\'re starting from'),
+      photo?h('div',{style:{textAlign:'center',marginBottom:14}},
+        h('img',{src:'data:image/jpeg;base64,'+photo,style:{width:180,height:180,objectFit:'cover',borderRadius:16,border:'1px solid #2A3447'}}),
+        h('div',{style:{fontSize:11,color:C.success,marginTop:8}},'✓ Photo captured')
+      ):h('div',{style:{textAlign:'center',marginBottom:14,color:C.silverDim,fontSize:12}},'No photo yet'),
+      h('div',{style:{display:'flex',gap:10,marginBottom:14}},
+        h('button',{onClick:()=>setCameraOpen(true),className:'btn',style:{flex:1,padding:'12px 0',background:'linear-gradient(135deg,#1D4ED8,#3B82F6)',borderRadius:12,color:'#fff',fontSize:13,fontWeight:700}},photo?'Retake Photo':'Take Photo'),
+        h('button',{onClick:()=>fileRef.current&&fileRef.current.click(),className:'btn',style:{flex:1,padding:'12px 0',background:C.navyLight,border:'1px solid #2A3447',borderRadius:12,color:C.silverDim,fontSize:13,fontWeight:700}},'Upload Instead')
+      ),
+      h('input',{ref:fileRef,type:'file',accept:'image/*',style:{display:'none'},onChange:capturePhoto}),
+      errMsg&&h('div',{style:{color:C.danger,fontSize:12,textAlign:'center',marginBottom:10}},errMsg),
+      h('button',{onClick:runAssessment,disabled:analyzing,className:'btn',style:{width:'100%',padding:'16px 0',background:'linear-gradient(135deg,#1D4ED8,#3B82F6)',borderRadius:14,color:'#fff',fontSize:15,fontWeight:800}},analyzing?'💀 Coach Skelly is assessing you...':'FINISH ASSESSMENT'),
+      h('button',{onClick:runAssessment,disabled:analyzing,className:'btn',style:{width:'100%',marginTop:10,padding:'10px 0',background:'transparent',color:C.silverDim,fontSize:11}},'Skip photo and finish')
+    ),
+
+    step<3&&h('button',{onClick:()=>setStep(s=>s+1),disabled:(step===0&&!canNext0)||(step===1&&!canNext1)||(step===2&&!canNext2),className:'btn',style:{width:'100%',marginTop:10,padding:'16px 0',background:'linear-gradient(135deg,#1D4ED8,#3B82F6)',borderRadius:14,color:'#fff',fontSize:15,fontWeight:800}},'NEXT'),
+    h('div',{style:{textAlign:'center',marginTop:14,fontSize:11,color:C.silverDim}},(step+1)+' of 4')
+  );
+}
+
 function DashScreen({setScreen,user,profile,setProfile,nonnegTiers}){
   const tier=profile?.tier||1;
   const TIERS=nonnegTiers||NONNEG_TIERS;
-  const NONNEG=TIERS[tier]||TIERS[1];
+  const NONNEG=profile?.nonneg_items||TIERS[tier]||TIERS[1];
   const [checked,setChecked]=useState({});
   const [disciplineChecked,setDisciplineChecked]=useState({});
   const [saving,setSaving]=useState(false);
@@ -592,15 +707,22 @@ function DashScreen({setScreen,user,profile,setProfile,nonnegTiers}){
     }else{
       await sb.from('daily_logs').insert({user_id:user.id,date:today,nonneg_completed:newChecked});
     }
-    const{data:freshProfile}=await sb.from('profiles').select('points,streak').eq('id',user.id).maybeSingle();
+    const{data:freshProfile}=await sb.from('profiles').select('points,streak,nonneg_items').eq('id',user.id).maybeSingle();
     const basePoints=freshProfile?.points??(profile?.points||0);
     const baseStreak=freshProfile?.streak??(profile?.streak||0);
     const np=Math.max(0,basePoints+pointsDelta);
     let ns=baseStreak;
     if(!allBefore&&allAfter)ns=ns+1;
     if(allBefore&&!allAfter)ns=Math.max(0,ns-1);
-    await sb.from('profiles').update({points:np,streak:ns,last_active:today}).eq('id',user.id);
-    setProfile(p=>({...p,points:np,streak:ns}));
+    const updatePayload={points:np,streak:ns,last_active:today};
+    if(!allBefore&&allAfter&&ns>0&&ns%10===0){
+      const currentItems=freshProfile?.nonneg_items||profile?.nonneg_items;
+      if(currentItems){
+        updatePayload.nonneg_items=currentItems.map(it=>({...it,target:it.target+(it.increment||5)}));
+      }
+    }
+    await sb.from('profiles').update(updatePayload).eq('id',user.id);
+    setProfile(p=>({...p,points:np,streak:ns,...(updatePayload.nonneg_items?{nonneg_items:updatePayload.nonneg_items}:{})}));
     setSaving(false);
   };
 
@@ -2098,8 +2220,8 @@ function ClientsAdminTab({workouts}){
 
   const changeTier=async(clientId,newTier)=>{
     setSavingId(clientId);
-    await sb.from('profiles').update({tier:newTier,streak:0}).eq('id',clientId);
-    setClients(cs=>cs.map(c=>c.id===clientId?{...c,tier:newTier,streak:0}:c));
+    await sb.from('profiles').update({tier:newTier}).eq('id',clientId);
+    setClients(cs=>cs.map(c=>c.id===clientId?{...c,tier:newTier}:c));
     setSavingId(null);
   };
 
@@ -2142,7 +2264,7 @@ function ClientsAdminTab({workouts}){
             h('div',{style:{fontSize:10,color:C.silverDim}},(c.points||0)+' pts - '+(c.streak||0)+'d streak')
           )
         ),
-        c.streak>=10&&h('div',{style:{background:'#22C55E15',borderRadius:10,padding:'8px 10px',marginBottom:10,fontSize:11,color:C.success,fontWeight:700}},'🔥 '+(c.streak)+'-day streak - ready to level up'),
+        c.streak>=10&&h('div',{style:{background:'#22C55E15',borderRadius:10,padding:'8px 10px',marginBottom:10,fontSize:11,color:C.success,fontWeight:700}},'🔥 '+(c.streak)+'-day streak - non-negotiable targets auto-increased'),
         h('div',{style:{display:'flex',gap:6,alignItems:'center',marginBottom:8}},
           h('div',{style:{fontSize:10,color:C.silverDim,marginRight:4}},'TIER:'),
           [1,2,3].map(t=>h('button',{key:t,onClick:()=>changeTier(c.id,t),disabled:savingId===c.id,className:'btn',style:{flex:1,padding:'8px 0',borderRadius:8,fontSize:11,fontWeight:800,background:c.tier===t?C.blue:C.navy,color:c.tier===t?'#fff':C.silverDim,border:'1px solid '+(c.tier===t?C.blue:'#2A3447')}},'T'+t))
@@ -2225,7 +2347,7 @@ function App(){
       if(session?.user){
         setUser(session.user);
         const prof=await loadProfile(session.user.id);
-        setScreen(prof?.is_paid?S.DASH:S.PAYMENT);
+        setScreen(prof?.is_paid?(prof?.nonneg_items?S.DASH:S.ASSESSMENT):S.PAYMENT);
       } else {
         setScreen(S.AUTH);
       }
@@ -2247,6 +2369,7 @@ function App(){
       case S.WELCOME:return h(WelcomeScreen,{setScreen});
       case S.ONBOARDING:return h(OnboardingFlow,{setScreen,user,setProfile});
       case S.PAYMENT:return h(PaymentScreen,{setScreen,user,profile,setProfile});
+      case S.ASSESSMENT:return h(AssessmentScreen,{setScreen,user,profile,setProfile});
       case S.DASH:return h(DashScreen,{setScreen,user,profile,setProfile,nonnegTiers});
       case S.WORKOUT:return h(WorkoutScreen,{setScreen,setEx,profile,user,setProfile,workouts,coachPrompt});
       case S.EXERCISE:return h(ExerciseScreen,{setScreen,exercise:ex,user,profile,setProfile});
