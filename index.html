@@ -57,6 +57,21 @@ function gradeColor(score){
   return C.danger;
 }
 
+function getTierPlan(tier){
+  if(tier>=3)return{
+    stretch:3,pilates:7,conditioning:8,total:18,
+    tone:"This is Tier 3 - two-a-day intensity prep, targeting about 90 minutes of total work. Heavier conditioning volume and core-centric Pilates work, more sweat, getting the body ready for Phase 2's real conditioning load. When picking Stretch exercises, favor deeper, longer-hold hip-opening stretches (like Pigeon Pose) over quick basic ones. Pick more demanding movements within the list, not the gentlest options."
+  };
+  if(tier===2)return{
+    stretch:3,pilates:6,conditioning:3,total:12,
+    tone:"This is Tier 2 - ramping up, targeting about 60 minutes of total work. Core and Pilates-centric focus with more conditioning and sweat than Tier 1. Daily requirements and nutrition matter a lot here. When picking Stretch exercises, favor deeper, longer-hold hip-opening stretches (like Pigeon Pose) over quick basic ones. Pick moderately challenging movements, avoid the most basic ones."
+  };
+  return{
+    stretch:2,pilates:3,conditioning:1,total:6,
+    tone:"This is Tier 1 - trust the process phase, assessing where injuries and weaknesses are, targeting about 30 minutes of total work. Keep intensity low and controlled, but do NOT default to only the most basic movements in the list. Favor exercises that build coordination and body control (like Bird Dog, Side Leg Series, Dead Bug, Roll Up) over the simplest stretches, and lean core-centric with the Pilates picks. When picking Stretch exercises, favor deeper, longer-hold hip-opening stretches (like Pigeon Pose) since this may be the main window to work on hip mobility. This should feel like real training, not a beginner warmup."
+  };
+}
+
 const S={
   LOADING:'loading',AUTH:'auth',WELCOME:'welcome',
   ONBOARDING:'onboarding',PAYMENT:'payment',
@@ -777,10 +792,13 @@ function WorkoutScreen({setScreen,setEx,profile,user,setProfile,workouts,coachPr
 
   const buildWeek=async()=>{
     setLoadingPlan(true);
+    const tier=profile?.tier||1;
+    const tp=getTierPlan(tier);
     const list=phase1Workouts.map(w=>w.name+' ('+w.type+')').join(', ');
     const painAreas=(profile?.pain_areas||[]).join(', ')||'none listed';
     const msg='Build a 7-day workout plan (Monday through Sunday) using ONLY exercises from this list: '+list+
-      '. Each day needs exactly 10 exercises: 3 Stretch, 4 Pilates, 3 Conditioning. You may reuse exercises across different days.'+
+      '. Each day needs exactly '+tp.total+' exercises: '+tp.stretch+' Stretch, '+tp.pilates+' Pilates, '+tp.conditioning+' Conditioning. You may reuse exercises across different days.'+
+      ' '+tp.tone+
       ' My known pain areas: '+painAreas+
       '. What I want to prioritize this week: '+(priority||'not specified')+
       '. Any current pain or injuries: '+(painToday||'none')+
@@ -1998,10 +2016,12 @@ function ClientWorkoutEditor({client,workouts,onClose}){
 
   const askAI=async()=>{
     setAskingAI(true);
+    const tp=getTierPlan(clientProfile?.tier||1);
     const list=phase1Workouts.map(w=>w.name+' ('+w.type+')').join(', ');
     const painAreas=(clientProfile?.pain_areas||[]).join(', ')||'none listed';
-    const msg='Build a 7-day workout plan (Monday through Sunday) for a Phase '+(clientProfile?.phase||1)+' client using ONLY exercises from this list: '+list+
-      '. Each day needs exactly 10 exercises: 3 Stretch, 4 Pilates, 3 Conditioning. You may reuse exercises across different days.'+
+    const msg='Build a 7-day workout plan (Monday through Sunday) for a Phase '+(clientProfile?.phase||1)+' Tier '+(clientProfile?.tier||1)+' client using ONLY exercises from this list: '+list+
+      '. Each day needs exactly '+tp.total+' exercises: '+tp.stretch+' Stretch, '+tp.pilates+' Pilates, '+tp.conditioning+' Conditioning. You may reuse exercises across different days.'+
+      ' '+tp.tone+
       ' Known pain areas: '+painAreas+
       (clientProfile?.body_score?'. Current body score: '+clientProfile.body_score+'/100':'')+
       '. Trainer wants to prioritize: '+(priority||'general Phase 1 restoration')+
