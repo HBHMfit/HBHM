@@ -1142,29 +1142,36 @@ function ExerciseScreen({setScreen,exercise,user,profile,setProfile}){
   );
 }
 
+const MINDSET_PROMPT=`You are Coach Skelly in Mindset mode for the HBHM (Healthy Body Healthy Mind) app. Right now you are not talking about workouts, reps, or nutrition targets - you are here to talk through discipline, motivation, and mindset with the client. Listen, ask real questions, help them think through what's actually going on in their head, and push them toward discipline and consistency without being preachy. You're supportive but still direct and honest, never soft or vague. Keep replies conversational and not too long. You are a coach helping with mindset, not a therapist - if something sounds like it goes beyond motivation and discipline into real emotional distress, gently encourage them to talk to a real person they trust or a professional, and keep the conversation grounded and supportive.`;
+
 function CoachScreen({setScreen,user,coachPrompt}){
-  const WELCOME_MSG={role:'coach',text:"Welcome to Phase 1. Your joints, tendons, movement patterns - we fix these FIRST. Daily non-negotiables, food logging, weekly body photo. No exceptions. Ask me anything."};
-  const [msgs,setMsgs]=useState([WELCOME_MSG]);
+  const TRAINING_WELCOME={role:'coach',text:"Welcome to Phase 1. Your joints, tendons, movement patterns - we fix these FIRST. Daily non-negotiables, food logging, weekly body photo. No exceptions. Ask me anything."};
+  const MINDSET_WELCOME={role:'coach',text:"This is your space to talk mindset - discipline, motivation, where your head's at. What's going on with you today?"};
+  const [mode,setMode]=useState('training');
+  const [msgs,setMsgs]=useState([TRAINING_WELCOME]);
   const [input,setInput]=useState('');
   const [loading,setLoading]=useState(false);
-  const [historyLoaded,setHistoryLoaded]=useState(false);
   const bottomRef=useRef(null);
+
+  const table=mode==='training'?'coach_messages':'mindset_messages';
+  const welcomeMsg=mode==='training'?TRAINING_WELCOME:MINDSET_WELCOME;
 
   useEffect(()=>{if(bottomRef.current)bottomRef.current.scrollIntoView({behavior:'smooth'});},[msgs]);
 
   useEffect(()=>{
-    if(!user){setHistoryLoaded(true);return;}
-    sb.from('coach_messages').select('role,content').eq('user_id',user.id).order('created_at',{ascending:true}).then(({data})=>{
+    if(!user){setMsgs([welcomeMsg]);return;}
+    sb.from(table).select('role,content').eq('user_id',user.id).order('created_at',{ascending:true}).then(({data})=>{
       if(data&&data.length>0){
         setMsgs(data.map(m=>({role:m.role,text:m.content})));
+      }else{
+        setMsgs([welcomeMsg]);
       }
-      setHistoryLoaded(true);
     });
-  },[user]);
+  },[user,mode]);
 
   const saveMessage=async(role,text)=>{
     if(!user)return;
-    await sb.from('coach_messages').insert({user_id:user.id,role,content:text});
+    await sb.from(table).insert({user_id:user.id,role,content:text});
   };
 
   const send=async()=>{
@@ -1174,10 +1181,11 @@ function CoachScreen({setScreen,user,coachPrompt}){
     saveMessage('user',msg);
     try{
       const history=msgs.map(m=>({role:m.role==='coach'?'assistant':'user',content:m.text}));
+      const activePrompt=mode==='mindset'?MINDSET_PROMPT:(coachPrompt||undefined);
       const res=await fetch(SB_URL+'/functions/v1/Coach-Skelly',{
         method:'POST',
         headers:{'Content-Type':'application/json','Authorization':'Bearer '+SB_ANON,'apikey':SB_ANON},
-        body:JSON.stringify({message:msg,history,systemPrompt:coachPrompt||undefined})
+        body:JSON.stringify({message:msg,history,systemPrompt:activePrompt})
       });
       const data=await res.json();
       const reply=data.reply||'Stay focused. No excuses.';
@@ -1191,17 +1199,23 @@ function CoachScreen({setScreen,user,coachPrompt}){
   };
 
   return h('div',{style:{minHeight:'100vh',background:C.navy,display:'flex',flexDirection:'column',paddingBottom:140}},
-    h('div',{style:{padding:'54px 24px 16px',background:C.navyMid,borderBottom:'1px solid #1C2535',display:'flex',alignItems:'center',gap:14}},
-      h(Avatar,{size:48,animate:true}),
-      h('div',null,
-        h('div',{style:{fontSize:16,fontWeight:800,color:C.silverBright}},'Coach Skelly'),
-        h('div',{style:{fontSize:11,color:C.success}},'Online')
+    h('div',{style:{padding:'54px 24px 16px',background:C.navyMid,borderBottom:'1px solid #1C2535'}},
+      h('div',{style:{display:'flex',alignItems:'center',gap:14,marginBottom:14}},
+        h(Avatar,{size:48,animate:true}),
+        h('div',null,
+          h('div',{style:{fontSize:16,fontWeight:800,color:C.silverBright}},'Coach Skelly'),
+          h('div',{style:{fontSize:11,color:C.success}},'Online')
+        )
+      ),
+      h('div',{style:{display:'flex',background:C.navy,borderRadius:12,padding:4}},
+        h('button',{onClick:()=>setMode('training'),className:'btn',style:{flex:1,padding:'9px 0',borderRadius:9,background:mode==='training'?C.blue:'transparent',color:mode==='training'?'#fff':C.silverDim,fontSize:12,fontWeight:700}},'💪 Training'),
+        h('button',{onClick:()=>setMode('mindset'),className:'btn',style:{flex:1,padding:'9px 0',borderRadius:9,background:mode==='mindset'?'#A855F7':'transparent',color:mode==='mindset'?'#fff':C.silverDim,fontSize:12,fontWeight:700}},'🧠 Mindset')
       )
     ),
     h('div',{style:{flex:1,overflowY:'auto',padding:20,display:'flex',flexDirection:'column',gap:14}},
       msgs.map((m,i)=>h('div',{key:i,style:{display:'flex',gap:10,flexDirection:m.role==='user'?'row-reverse':'row'}},
         m.role==='coach'&&h(Avatar,{size:32}),
-        h('div',{style:{maxWidth:'78%',padding:'12px 16px',borderRadius:m.role==='user'?'18px 18px 4px 18px':'18px 18px 18px 4px',background:m.role==='user'?'linear-gradient(135deg,#1D4ED8,#3B82F6)':C.navyLight,fontSize:14,color:C.silverBright,lineHeight:1.6}},m.text)
+        h('div',{style:{maxWidth:'78%',padding:'12px 16px',borderRadius:m.role==='user'?'18px 18px 4px 18px':'18px 18px 18px 4px',background:m.role==='user'?(mode==='mindset'?'linear-gradient(135deg,#7C3AED,#A855F7)':'linear-gradient(135deg,#1D4ED8,#3B82F6)'):C.navyLight,fontSize:14,color:C.silverBright,lineHeight:1.6}},m.text)
       )),
       loading&&h('div',{style:{display:'flex',gap:10}},
         h(Avatar,{size:32}),
@@ -1214,8 +1228,8 @@ function CoachScreen({setScreen,user,coachPrompt}){
       h('div',{ref:bottomRef})
     ),
     h('div',{style:{position:'fixed',bottom:70,left:'50%',transform:'translateX(-50%)',width:'100%',maxWidth:430,padding:'12px 16px',background:C.navy,borderTop:'1px solid #1C2535',display:'flex',gap:10}},
-      h('input',{value:input,onChange:e=>setInput(e.target.value),onKeyDown:e=>e.key==='Enter'&&send(),placeholder:'Ask Coach Skelly anything...',style:{flex:1,padding:'12px 16px',borderRadius:24,fontSize:14,background:C.navyLight,border:'1.5px solid #2A3447',color:C.silverBright,outline:'none'}}),
-      h('button',{onClick:send,className:'btn',style:{width:46,height:46,borderRadius:'50%',background:input.trim()?'linear-gradient(135deg,#1D4ED8,#3B82F6)':C.border,fontSize:18,color:'#fff',display:'flex',alignItems:'center',justifyContent:'center'}},'→')
+      h('input',{value:input,onChange:e=>setInput(e.target.value),onKeyDown:e=>e.key==='Enter'&&send(),placeholder:mode==='mindset'?"What's on your mind...":'Ask Coach Skelly anything...',style:{flex:1,padding:'12px 16px',borderRadius:24,fontSize:14,background:C.navyLight,border:'1.5px solid #2A3447',color:C.silverBright,outline:'none'}}),
+      h('button',{onClick:send,className:'btn',style:{width:46,height:46,borderRadius:'50%',background:input.trim()?(mode==='mindset'?'linear-gradient(135deg,#7C3AED,#A855F7)':'linear-gradient(135deg,#1D4ED8,#3B82F6)'):C.border,fontSize:18,color:'#fff',display:'flex',alignItems:'center',justifyContent:'center'}},'→')
     ),
     h(BottomNav,{screen:S.COACH,setScreen})
   );
