@@ -304,8 +304,8 @@ function WelcomeScreen({setScreen}){
 
 function OnboardingFlow({setScreen,user,setProfile}){
   const [step,setStep]=useState(0);
-  const [data,setData]=useState({fitness:'',goals:[],pain:[],equipment:'',budget:'',age:'',height:'',weight:''});
-  const STEPS=6;
+  const [data,setData]=useState({fitness:'',goals:[],equipment:'',budget:'',age:'',height:'',weight:''});
+  const STEPS=5;
   const pct=Math.round(((step+1)/STEPS)*100);
   const inp={width:'100%',padding:'12px 14px',borderRadius:10,fontSize:15,background:C.navy,border:'1.5px solid #2A3447',color:C.silverBright,outline:'none',boxSizing:'border-box',marginBottom:10};
 
@@ -316,7 +316,6 @@ function OnboardingFlow({setScreen,user,setProfile}){
     {id:'athlete',label:'Athlete/Advanced',sub:'High performance training'}
   ];
   const goalOpts=['Lose weight','Build muscle','More energy','Fix injuries','Better flexibility','Mental clarity','Run farther','Get stronger'];
-  const painOpts=['Neck','Shoulders','Upper Back','Lower Back','Chest','Core/Abs','Hips/Glutes','Quads','Hamstrings','Knees','Calves','Ankles/Feet'];
   const equipOpts=[
     {id:'none',label:'Bodyweight Only',sub:'No equipment at home'},
     {id:'home',label:'Home Equipment',sub:'Pull up bar, bands, dumbbells'},
@@ -329,12 +328,10 @@ function OnboardingFlow({setScreen,user,setProfile}){
   ];
 
   const toggleGoal=g=>setData(d=>({...d,goals:d.goals.includes(g)?d.goals.filter(x=>x!==g):[...d.goals,g]}));
-  const togglePain=p=>setData(d=>({...d,pain:d.pain.includes(p)?d.pain.filter(x=>x!==p):[...d.pain,p]}));
 
   const finish=async()=>{
     await sb.from('profiles').update({
       phase:1,tier:1,
-      pain_areas:data.pain,
       equipment:data.equipment,
       goal:data.goals.join(', '),
       age:parseInt(data.age)||null,
@@ -350,8 +347,8 @@ function OnboardingFlow({setScreen,user,setProfile}){
   const canNext=()=>{
     if(step===0)return data.fitness!=='';
     if(step===1)return data.goals.length>0;
-    if(step===3)return data.equipment!=='';
-    if(step===4)return data.budget!=='';
+    if(step===2)return data.equipment!=='';
+    if(step===3)return data.budget!=='';
     return true;
   };
 
@@ -391,22 +388,6 @@ function OnboardingFlow({setScreen,user,setProfile}){
     ),
 
     step===2&&h('div',null,
-      h('div',{style:{display:'flex',alignItems:'center',gap:14,marginBottom:16}},
-        h(Avatar,{size:48}),
-        h('div',null,
-          h('div',{style:{fontSize:20,fontWeight:800,color:C.silverBright}},'Where do you feel pain or tightness?'),
-          h('div',{style:{fontSize:12,color:C.silverDim,marginTop:4}},'Coach Skelly targets these in Phase 1.')
-        )
-      ),
-      h('div',{style:{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:14}},
-        painOpts.map(p=>h('button',{key:p,onClick:()=>togglePain(p),className:'btn',style:{padding:'12px',borderRadius:12,textAlign:'left',background:data.pain.includes(p)?'#EF444415':C.navyLight,border:'1.5px solid '+(data.pain.includes(p)?C.danger:C.border),display:'flex',alignItems:'center',gap:8}},
-          h('div',{style:{width:10,height:10,borderRadius:'50%',flexShrink:0,background:data.pain.includes(p)?C.danger:C.border}}),
-          h('span',{style:{fontSize:13,fontWeight:700,color:data.pain.includes(p)?C.silverBright:C.silver}},p)
-        ))
-      )
-    ),
-
-    step===3&&h('div',null,
       h('div',{style:{display:'flex',alignItems:'center',gap:14,marginBottom:24}},
         h(Avatar,{size:48}),
         h('div',null,
@@ -417,7 +398,7 @@ function OnboardingFlow({setScreen,user,setProfile}){
       equipOpts.map(o=>selBtn(data.equipment===o.id,()=>setData(d=>({...d,equipment:o.id})),o.label,o.sub))
     ),
 
-    step===4&&h('div',null,
+    step===3&&h('div',null,
       h('div',{style:{display:'flex',alignItems:'center',gap:14,marginBottom:24}},
         h(Avatar,{size:48}),
         h('div',null,
@@ -428,7 +409,7 @@ function OnboardingFlow({setScreen,user,setProfile}){
       budgetOpts.map(o=>selBtn(data.budget===o.id,()=>setData(d=>({...d,budget:o.id})),o.label,o.sub))
     ),
 
-    step===5&&h('div',null,
+    step===4&&h('div',null,
       h('div',{style:{display:'flex',alignItems:'center',gap:14,marginBottom:24}},
         h(Avatar,{size:48}),
         h('div',null,
@@ -449,8 +430,7 @@ function OnboardingFlow({setScreen,user,setProfile}){
       h('button',{onClick:next,disabled:!canNext(),className:'btn',style:{flex:1,padding:'16px 0',background:canNext()?'linear-gradient(135deg,#1D4ED8,#3B82F6)':C.border,borderRadius:14,color:canNext()?'#fff':C.silverDim,fontSize:15,fontWeight:800}},
         step===STEPS-1?'BUILD MY PROGRAM':'NEXT'
       )
-    ),
-    step===2&&h('button',{onClick:next,className:'btn',style:{width:'100%',marginTop:10,padding:'12px 0',background:'transparent',border:'1px solid #2A3447',borderRadius:14,color:C.silverDim,fontSize:13}},'Skip - no pain areas')
+    )
   );
 }
 
@@ -501,16 +481,33 @@ function PaymentScreen({setScreen,user,profile,setProfile}){
   );
 }
 
+const PAIN_OPTS=[
+  {group:'Upper Body',items:['Neck','Shoulders (L)','Shoulders (R)','Upper Back','Chest','Biceps/Triceps (L)','Biceps/Triceps (R)','Elbows (L)','Elbows (R)','Forearms (L)','Forearms (R)','Wrists (L)','Wrists (R)','Palms (L)','Palms (R)','Fingers (L)','Fingers (R)']},
+  {group:'Core',items:['Core/Abs','Obliques','Lower Back']},
+  {group:'Lower Body',items:['Hips/Glutes','Groin','Quads (L)','Quads (R)','Hamstrings (L)','Hamstrings (R)','Knees (L)','Knees (R)','Shins (L)','Shins (R)','Calves (L)','Calves (R)','Ankles (L)','Ankles (R)','Feet (L)','Feet (R)']}
+];
+
+function classifyFitnessLevel(t){
+  const strong=(t.pushups>=40)&&(t.squats>=40)&&(t.pullups>=8);
+  const developing=(t.pushups<15)||(t.squats<15);
+  if(strong)return'strong';
+  if(developing)return'developing';
+  return'moderate';
+}
+
 function AssessmentScreen({setScreen,user,profile,setProfile}){
   const [step,setStep]=useState(-1);
-  const [activityLevel,setActivityLevel]=useState('');
   const [workoutTime,setWorkoutTime]=useState('');
   const [wantFromProgram,setWantFromProgram]=useState('');
+  const [pain,setPain]=useState([]);
   const [photo,setPhoto]=useState(null);
   const [cameraOpen,setCameraOpen]=useState(false);
+  const [testNums,setTestNums]=useState({pushups:'',pullups:'',chinups:'',squats:'',run_distance:''});
   const [analyzing,setAnalyzing]=useState(false);
   const [errMsg,setErrMsg]=useState('');
   const fileRef=useRef(null);
+
+  const togglePain=p=>setPain(arr=>arr.includes(p)?arr.filter(x=>x!==p):[...arr,p]);
 
   const capturePhoto=(e)=>{
     const file=e.target.files[0];if(!file)return;
@@ -535,15 +532,26 @@ function AssessmentScreen({setScreen,user,profile,setProfile}){
         bodyNote='Initial body assessment score: '+parsed1.score+'/100. '+(parsed1.overall||'');
         await sb.from('profiles').update({body_score:parsed1.score,body_feedback:parsed1.overall,last_photo_date:getLocalDate()}).eq('id',user.id);
       }
+
+      const testResults={
+        pushups:parseInt(testNums.pushups)||0,
+        pullups:parseInt(testNums.pullups)||0,
+        chinups:parseInt(testNums.chinups)||0,
+        squats:parseInt(testNums.squats)||0,
+        run_distance:testNums.run_distance||'0'
+      };
+      const level=classifyFitnessLevel(testResults);
+      testResults.level=level;
+
       const defaultItems=NONNEG_TIERS[1];
       const itemList=defaultItems.map(it=>it.id+' ('+it.label+')').join(', ');
-      const msg='A brand new client is starting Phase 1 of the HBHM fitness program. '+
-        'Their self-reported activity level: '+activityLevel+'. '+
+      const msg='A brand new client is starting Phase 1 of the HBHM fitness program. They just completed a real max-effort fitness test (not self-reported): '+
+        testResults.pushups+' push-ups nonstop, '+testResults.pullups+' pull-ups nonstop, '+testResults.chinups+' chin-ups nonstop, '+testResults.squats+' squats nonstop, and ran '+testResults.run_distance+' before needing to stop. '+
         'Time they can dedicate per workout: '+workoutTime+'. '+
         'What they want from this program: '+wantFromProgram+'. '+
         (bodyNote?bodyNote+'. ':'')+
-        'Set realistic, honest STARTING daily non-negotiable targets for someone at this level - do not assume they are already fit. If they are very out of shape, start low (like 5 push-ups), not the standard beginner numbers. Exercises: '+itemList+
-        '. Respond with ONLY JSON, no other text, mapping each exercise id to a starting number, like: {"pushups":5,"chinups":1,"pullups":1,"situps":10,"crunches":10,"vsits":5,"sideplanks":10,"calfraises":15,"squats":10}';
+        'Set realistic, honest STARTING daily non-negotiable targets based on these REAL test numbers - someone who just did 40 push-ups should NOT get a target of 5. Scale targets to roughly 60-70% of their tested max so it is achievable daily but still real. Exercises: '+itemList+
+        '. Respond with ONLY JSON, no other text, mapping each exercise id to a starting number, like: {"pushups":25,"chinups":5,"pullups":5,"situps":15,"crunches":15,"vsits":15,"sideplanks":15,"calfraises":25,"squats":25}';
       const res2=await fetch(SB_URL+'/functions/v1/Coach-Skelly',{
         method:'POST',
         headers:{'Content-Type':'application/json','Authorization':'Bearer '+SB_ANON,'apikey':SB_ANON},
@@ -552,8 +560,8 @@ function AssessmentScreen({setScreen,user,profile,setProfile}){
       const data2=await res2.json();
       const targets=extractJSON(data2.reply);
       const nonnegItems=defaultItems.map(it=>({id:it.id,label:it.label,target:targets[it.id]||it.target,unit:it.unit||null,increment:5}));
-      await sb.from('profiles').update({nonneg_items:nonnegItems,activity_level:activityLevel}).eq('id',user.id);
-      setProfile(p=>({...p,nonneg_items:nonnegItems,activity_level:activityLevel}));
+      await sb.from('profiles').update({nonneg_items:nonnegItems,pain_areas:pain,fitness_test:testResults}).eq('id',user.id);
+      setProfile(p=>({...p,nonneg_items:nonnegItems,pain_areas:pain,fitness_test:testResults}));
       setScreen(S.DASH);
     }catch(e){
       setErrMsg("Couldn't complete the assessment. Try again.");
@@ -562,9 +570,9 @@ function AssessmentScreen({setScreen,user,profile,setProfile}){
   };
 
   const inp={width:'100%',padding:'14px 16px',borderRadius:12,fontSize:14,background:C.navyLight,border:'1.5px solid #2A3447',color:C.silverBright,outline:'none',boxSizing:'border-box',marginBottom:12};
-  const canNext0=activityLevel!=='';
-  const canNext1=workoutTime!=='';
-  const canNext2=wantFromProgram.trim()!=='';
+  const canNext0=workoutTime!=='';
+  const canNext1=wantFromProgram.trim()!=='';
+  const canNext3=testNums.pushups!==''&&testNums.pullups!==''&&testNums.chinups!==''&&testNums.squats!==''&&testNums.run_distance!=='';
 
   if(cameraOpen){
     return h(CameraModal,{
@@ -577,45 +585,40 @@ function AssessmentScreen({setScreen,user,profile,setProfile}){
     h('div',{style:{display:'flex',justifyContent:'center',marginBottom:20}},h(Avatar,{size:64,animate:true})),
 
     step===-1&&h('div',null,
-      h('div',{style:{fontSize:22,fontWeight:900,color:C.silverBright,marginBottom:16,textAlign:'center',lineHeight:1.3}},"HBHM isn't just another fitness app."),
+      h('div',{style:{fontSize:22,fontWeight:900,color:C.silverBright,marginBottom:16,textAlign:'center',lineHeight:1.3}},"Time for your Fitness Test."),
       h('div',{style:{background:C.navyLight,borderRadius:16,padding:20,border:'1px solid #2A3447',marginBottom:16}},
-        h('div',{style:{fontSize:14,color:C.silver,lineHeight:1.8,textAlign:'center'}},"It's about the mind and body. Once you master the mind, your body follows.")
+        h('div',{style:{fontSize:14,color:C.silver,lineHeight:1.8,textAlign:'center'}},"Real numbers, not guesses. This is how Coach Skelly calibrates everything - your non-negotiables, your pain areas, your starting point.")
       ),
-      h('div',{style:{fontSize:11,color:C.blue,fontWeight:700,letterSpacing:1.5,marginBottom:10}},'THE THREE PHASES'),
-      h('div',{style:{display:'flex',flexDirection:'column',gap:8,marginBottom:16}},
-        [
-          {n:'Phase 1',t:'Restore',d:'Fix your foundation. Mobility, control, movement quality. Everyone starts here - no exceptions.'},
-          {n:'Phase 2',t:'Condition',d:'Real cardio, explosive work. Your body has to be ready for this.'},
-          {n:'Phase 3',t:'Strengthen',d:'Brute strength, real lifting. Earned, not given.'}
-        ].map(p=>h('div',{key:p.n,style:{background:C.navyLight,borderRadius:12,padding:'12px 14px',border:'1px solid #2A3447'}},
-          h('div',{style:{fontSize:12,fontWeight:800,color:C.blue}},p.n+' - '+p.t),
-          h('div',{style:{fontSize:12,color:C.silverDim,marginTop:2,lineHeight:1.5}},p.d)
-        ))
-      ),
-      h('div',{style:{fontSize:12,color:C.silverDim,lineHeight:1.6,marginBottom:20,textAlign:'center'}},"Inside Phase 1, you move through tiers as you build real consistency - not by rushing, by showing up. Let's find out where you're actually starting from."),
+      h('div',{style:{fontSize:12,color:C.silverDim,lineHeight:1.6,marginBottom:20,textAlign:'center'}},"Push-ups, pull-ups, chin-ups, squats - each to failure. Then run until you have to stop. Do them fresh, not right after a workout."),
       h('button',{onClick:()=>setStep(0),className:'btn',style:{width:'100%',padding:'16px 0',background:'linear-gradient(135deg,#1D4ED8,#3B82F6)',borderRadius:14,color:'#fff',fontSize:15,fontWeight:800}},"LET'S BEGIN")
     ),
 
-    step>=0&&h('div',{style:{fontSize:11,color:C.blue,fontWeight:700,letterSpacing:2,marginBottom:8,textAlign:'center'}},'INITIAL ASSESSMENT'),
-    step>=0&&h('div',{style:{fontSize:22,fontWeight:900,color:C.silverBright,marginBottom:20,textAlign:'center'}},"Let's see where you're actually at"),
+    step>=0&&h('div',{style:{fontSize:11,color:C.blue,fontWeight:700,letterSpacing:2,marginBottom:8,textAlign:'center'}},'FITNESS TEST'),
 
     step===0&&h('div',null,
-      h('div',{style:{fontSize:13,color:C.silver,marginBottom:14,textAlign:'center'}},"What's your physical activity like right now?"),
-      ['Sedentary - little to no exercise','Light activity - occasional movement','Moderately active - workout sometimes','Very active - train regularly'].map(opt=>h('button',{key:opt,onClick:()=>setActivityLevel(opt),className:'btn',style:{width:'100%',padding:'14px',marginBottom:10,borderRadius:12,textAlign:'left',fontSize:13,fontWeight:700,background:activityLevel===opt?'#3B82F620':C.navyLight,border:'1.5px solid '+(activityLevel===opt?C.blue:'#2A3447'),color:activityLevel===opt?C.silverBright:C.silverDim}},opt))
-    ),
-
-    step===1&&h('div',null,
-      h('div',{style:{fontSize:13,color:C.silver,marginBottom:14,textAlign:'center'}},'How much time can you dedicate per workout?'),
+      h('div',{style:{fontSize:22,fontWeight:900,color:C.silverBright,marginBottom:20,textAlign:'center'}},'How much time can you dedicate per workout?'),
       ['15-30 minutes','30-60 minutes','60-90 minutes','90+ minutes'].map(opt=>h('button',{key:opt,onClick:()=>setWorkoutTime(opt),className:'btn',style:{width:'100%',padding:'14px',marginBottom:10,borderRadius:12,textAlign:'left',fontSize:13,fontWeight:700,background:workoutTime===opt?'#3B82F620':C.navyLight,border:'1.5px solid '+(workoutTime===opt?C.blue:'#2A3447'),color:workoutTime===opt?C.silverBright:C.silverDim}},opt))
     ),
 
-    step===2&&h('div',null,
-      h('div',{style:{fontSize:13,color:C.silver,marginBottom:14,textAlign:'center'}},'What do you want from this program?'),
+    step===1&&h('div',null,
+      h('div',{style:{fontSize:22,fontWeight:900,color:C.silverBright,marginBottom:20,textAlign:'center'}},'What do you want from this program?'),
       h('textarea',{value:wantFromProgram,onChange:e=>setWantFromProgram(e.target.value),rows:4,placeholder:'e.g. lose weight, get back in shape before my kid is born, build discipline again...',style:{...inp,fontFamily:'inherit'}})
     ),
 
+    step===2&&h('div',null,
+      h('div',{style:{fontSize:20,fontWeight:900,color:C.silverBright,marginBottom:8,textAlign:'center'}},'Where do you feel pain or discomfort?'),
+      h('div',{style:{fontSize:12,color:C.silverDim,marginBottom:16,textAlign:'center'}},"Every area, big or small - Coach Skelly modifies your plan around these."),
+      PAIN_OPTS.map(group=>h('div',{key:group.group,style:{marginBottom:16}},
+        h('div',{style:{fontSize:11,color:C.blue,fontWeight:700,letterSpacing:1,marginBottom:8}},group.group.toUpperCase()),
+        h('div',{style:{display:'flex',flexWrap:'wrap',gap:8}},
+          group.items.map(p=>h('button',{key:p,onClick:()=>togglePain(p),className:'btn',style:{padding:'8px 14px',borderRadius:20,fontSize:12,fontWeight:600,background:pain.includes(p)?'#EF444420':C.navyLight,border:'1.5px solid '+(pain.includes(p)?C.danger:C.border),color:pain.includes(p)?C.silverBright:C.silverDim}},p))
+        )
+      )),
+      h('button',{onClick:()=>setStep(3),className:'btn',style:{width:'100%',marginTop:10,padding:'12px 0',background:'transparent',border:'1px solid #2A3447',borderRadius:14,color:C.silverDim,fontSize:13}},'No pain areas, skip')
+    ),
+
     step===3&&h('div',null,
-      h('div',{style:{fontSize:13,color:C.silver,marginBottom:14,textAlign:'center'}},'Optional: take a body photo so Coach Skelly can see where you\'re starting from'),
+      h('div',{style:{fontSize:13,color:C.silver,marginBottom:14,textAlign:'center'}},'Take a physique photo so Coach Skelly can see where you\'re starting from'),
       photo?h('div',{style:{textAlign:'center',marginBottom:14}},
         h('img',{src:'data:image/jpeg;base64,'+photo,style:{width:180,height:180,objectFit:'cover',borderRadius:16,border:'1px solid #2A3447'}}),
         h('div',{style:{fontSize:11,color:C.success,marginTop:8}},'✓ Photo captured')
@@ -625,13 +628,28 @@ function AssessmentScreen({setScreen,user,profile,setProfile}){
         h('button',{onClick:()=>fileRef.current&&fileRef.current.click(),className:'btn',style:{flex:1,padding:'12px 0',background:C.navyLight,border:'1px solid #2A3447',borderRadius:12,color:C.silverDim,fontSize:13,fontWeight:700}},'Upload Instead')
       ),
       h('input',{ref:fileRef,type:'file',accept:'image/*',style:{display:'none'},onChange:capturePhoto}),
-      errMsg&&h('div',{style:{color:C.danger,fontSize:12,textAlign:'center',marginBottom:10}},errMsg),
-      h('button',{onClick:runAssessment,disabled:analyzing,className:'btn',style:{width:'100%',padding:'16px 0',background:'linear-gradient(135deg,#1D4ED8,#3B82F6)',borderRadius:14,color:'#fff',fontSize:15,fontWeight:800}},analyzing?'💀 Coach Skelly is assessing you...':'FINISH ASSESSMENT'),
-      h('button',{onClick:runAssessment,disabled:analyzing,className:'btn',style:{width:'100%',marginTop:10,padding:'10px 0',background:'transparent',color:C.silverDim,fontSize:11}},'Skip photo and finish')
+      h('button',{onClick:()=>setStep(4),className:'btn',style:{width:'100%',marginTop:4,padding:'12px 0',background:'transparent',color:C.silverDim,fontSize:11}},'Skip photo for now')
     ),
 
-    step>=0&&step<3&&h('button',{onClick:()=>setStep(s=>s+1),disabled:(step===0&&!canNext0)||(step===1&&!canNext1)||(step===2&&!canNext2),className:'btn',style:{width:'100%',marginTop:10,padding:'16px 0',background:'linear-gradient(135deg,#1D4ED8,#3B82F6)',borderRadius:14,color:'#fff',fontSize:15,fontWeight:800}},'NEXT'),
-    step>=0&&h('div',{style:{textAlign:'center',marginTop:14,fontSize:11,color:C.silverDim}},(step+1)+' of 4')
+    step===4&&h('div',null,
+      h('div',{style:{fontSize:20,fontWeight:900,color:C.silverBright,marginBottom:6,textAlign:'center'}},'The test.'),
+      h('div',{style:{fontSize:12,color:C.silverDim,marginBottom:20,textAlign:'center'}},'Each one to failure. Real numbers, no rounding up.'),
+      h('div',{style:{fontSize:11,color:C.silverDim,marginBottom:6,fontWeight:600,letterSpacing:1}},'PUSH-UPS (nonstop, to failure)'),
+      h('input',{style:inp,placeholder:'e.g. 22',value:testNums.pushups,onChange:e=>setTestNums(t=>({...t,pushups:e.target.value})),type:'number'}),
+      h('div',{style:{fontSize:11,color:C.silverDim,marginBottom:6,fontWeight:600,letterSpacing:1}},'PULL-UPS (nonstop, to failure)'),
+      h('input',{style:inp,placeholder:'e.g. 4',value:testNums.pullups,onChange:e=>setTestNums(t=>({...t,pullups:e.target.value})),type:'number'}),
+      h('div',{style:{fontSize:11,color:C.silverDim,marginBottom:6,fontWeight:600,letterSpacing:1}},'CHIN-UPS (nonstop, to failure)'),
+      h('input',{style:inp,placeholder:'e.g. 6',value:testNums.chinups,onChange:e=>setTestNums(t=>({...t,chinups:e.target.value})),type:'number'}),
+      h('div',{style:{fontSize:11,color:C.silverDim,marginBottom:6,fontWeight:600,letterSpacing:1}},'SQUATS (nonstop, to failure)'),
+      h('input',{style:inp,placeholder:'e.g. 35',value:testNums.squats,onChange:e=>setTestNums(t=>({...t,squats:e.target.value})),type:'number'}),
+      h('div',{style:{fontSize:11,color:C.silverDim,marginBottom:6,fontWeight:600,letterSpacing:1}},'RUN - DISTANCE BEFORE YOU HAD TO STOP'),
+      h('input',{style:inp,placeholder:'e.g. 1.5 miles',value:testNums.run_distance,onChange:e=>setTestNums(t=>({...t,run_distance:e.target.value}))}),
+      errMsg&&h('div',{style:{color:C.danger,fontSize:12,textAlign:'center',marginBottom:10}},errMsg),
+      h('button',{onClick:runAssessment,disabled:analyzing||!canNext3,className:'btn',style:{width:'100%',padding:'16px 0',background:canNext3?'linear-gradient(135deg,#1D4ED8,#3B82F6)':C.border,borderRadius:14,color:canNext3?'#fff':C.silverDim,fontSize:15,fontWeight:800}},analyzing?'💀 Coach Skelly is assessing you...':'FINISH FITNESS TEST')
+    ),
+
+    step>=0&&step<4&&h('button',{onClick:()=>setStep(s=>s+1),disabled:(step===0&&!canNext0)||(step===1&&!canNext1),className:'btn',style:{width:'100%',marginTop:10,padding:'16px 0',background:'linear-gradient(135deg,#1D4ED8,#3B82F6)',borderRadius:14,color:'#fff',fontSize:15,fontWeight:800}},'NEXT'),
+    step>=0&&h('div',{style:{textAlign:'center',marginTop:14,fontSize:11,color:C.silverDim}},(step+1)+' of 5')
   );
 }
 
@@ -966,16 +984,20 @@ function WorkoutScreen({setScreen,setEx,profile,user,setProfile,workouts,coachPr
     setLoadingPlan(true);
     const tier=profile?.tier||1;
     const tp=await fetchTierPlan(tier);
+    const isStrong=profile?.fitness_test?.level==='strong';
+    if(isStrong)tp.conditioning=(tp.conditioning||0)+2;
     const categoryParts=[];
     if(tp.stretch)categoryParts.push(tp.stretch+' Stretch');
     if(tp.pilates)categoryParts.push(tp.pilates+' Pilates');
     if(tp.core)categoryParts.push(tp.core+' Core');
     if(tp.conditioning)categoryParts.push(tp.conditioning+' Conditioning');
+    const total=tp.stretch+tp.pilates+(tp.core||0)+tp.conditioning;
     const list=phase1Workouts.map(w=>w.name+' ('+w.type+')').join(', ');
     const painAreas=(profile?.pain_areas||[]).join(', ')||'none listed';
+    const strongNote=isStrong?' This client tested strong on their initial fitness test ('+(profile.fitness_test.pushups||0)+' push-ups, '+(profile.fitness_test.squats||0)+' squats, '+(profile.fitness_test.pullups||0)+' pull-ups) - give them 2 bonus Conditioning exercises today beyond the normal count, and lean toward harder variations throughout. Never let them feel under-challenged.':'';
     const msg='Build a 7-day workout plan (Monday through Sunday) using ONLY exercises from this list: '+list+
-      '. Each day needs exactly '+tp.total+' exercises: '+categoryParts.join(', ')+'. You may reuse exercises across different days.'+
-      ' '+tp.tone+
+      '. Each day needs exactly '+total+' exercises: '+categoryParts.join(', ')+'. You may reuse exercises across different days.'+
+      ' '+tp.tone+strongNote+
       ' My known pain areas: '+painAreas+
       '. What I want to prioritize this week: '+(priority||'not specified')+
       '. Any current pain or injuries: '+(painToday||'none')+
