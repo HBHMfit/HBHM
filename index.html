@@ -72,19 +72,35 @@ function gradeColor(score){
   return C.danger;
 }
 
-function getTierPlan(tier){
+// Hardcoded fallback only - used if the live tier_plans table can't be reached.
+// Source of truth is now the `tier_plans` table in Supabase, editable from the Trainer Dashboard.
+function getTierPlanFallback(tier){
   if(tier>=3)return{
-    stretch:3,pilates:7,conditioning:8,total:18,
-    tone:"This is Tier 3 - two-a-day intensity prep, targeting about 90 minutes of total work. Heavier conditioning volume and core-centric Pilates work, more sweat, getting the body ready for Phase 2's real conditioning load. When picking Stretch exercises, favor deeper, longer-hold hip-opening stretches (like Pigeon Pose) over quick basic ones. Pick more demanding movements within the list, not the gentlest options."
+    stretch:3,pilates:5,core:0,conditioning:8,total:16,
+    tone:"This is Tier 3 - the Mastery Gate before Phase 2. Heavier conditioning volume and skill-based Pilates work, getting the body ready for Phase 2's real conditioning load."
   };
   if(tier===2)return{
-    stretch:3,pilates:6,conditioning:3,total:12,
-    tone:"This is Tier 2 - ramping up, targeting about 60 minutes of total work. Core and Pilates-centric focus with more conditioning and sweat than Tier 1. Daily requirements and nutrition matter a lot here. When picking Stretch exercises, favor deeper, longer-hold hip-opening stretches (like Pigeon Pose) over quick basic ones. Pick moderately challenging movements, avoid the most basic ones."
+    stretch:3,pilates:5,core:0,conditioning:5,total:13,
+    tone:"This is Tier 2 - Bridge to Intensity. Core and Pilates-centric focus with more conditioning and sweat than Tier 1."
   };
   return{
-    stretch:2,pilates:3,conditioning:1,total:6,
-    tone:"This is Tier 1 - trust the process phase, assessing where injuries and weaknesses are, targeting about 30 minutes of total work. Keep intensity low and controlled, but do NOT default to only the most basic movements in the list. Favor exercises that build coordination and body control (like Bird Dog, Side Leg Series, Dead Bug, Roll Up) over the simplest stretches, and lean core-centric with the Pilates picks. When picking Stretch exercises, favor deeper, longer-hold hip-opening stretches (like Pigeon Pose) since this may be the main window to work on hip mobility. This should feel like real training, not a beginner warmup."
+    stretch:4,pilates:3,core:2,conditioning:3,total:12,
+    tone:"This is Tier 1 - Master the Foundation. Keep intensity appropriate to the client's fitness level, but do NOT default to only the most basic movements in the list."
   };
+}
+
+async function fetchTierPlan(tier){
+  try{
+    const{data,error}=await sb.from('tier_plans').select('*').eq('tier',tier).maybeSingle();
+    if(error||!data)return getTierPlanFallback(tier);
+    const stretch=data.stretch||0;
+    const pilates=data.pilates||0;
+    const core=data.core||0;
+    const conditioning=data.conditioning||0;
+    return{stretch,pilates,core,conditioning,total:stretch+pilates+core+conditioning,tone:data.tone||''};
+  }catch(e){
+    return getTierPlanFallback(tier);
+  }
 }
 
 const S={
@@ -147,7 +163,7 @@ const WORKOUTS = [
   {id:36,name:'Pull-Up',duration:'10 min',type:'Strength',sets:'3 x max reps',primary:['Lats','Biceps','Upper Back'],secondary:['Rear Deltoids','Core'],tip:'Dead hang start. Pull elbows to hips not chin to bar.',why:'The king of upper body pulling.'},
   {id:37,name:'Sit-Up',duration:'6 min',type:'Strength',sets:'3 x 25 reps',primary:['Core','Hip Flexors'],secondary:['Obliques'],tip:"Don't pull your neck. Exhale on the way up.",why:'Core strength that protects your lower back.'},
   {id:38,name:'Calf Raise',duration:'5 min',type:'Strength',sets:'3 x 20 reps',primary:['Gastrocnemius','Soleus'],secondary:['Ankle Stabilizers'],tip:'Full range all the way down all the way up.',why:'Strengthens calves and ankles. Prevents knee pain.'},
-  {id:39,name:'V-Up',duration:'5 min',type:'Strength',sets:'3 x 15 reps',primary:['Core','Hip Flexors'],secondary:['Lower Back'],tip:'Reach hands and feet toward each other simultaneously.',why:'Advanced core strength builder.'},
+  {id:39,name:'V-Up',duration:'5 min',type:'Core',sets:'3 x 15 reps',primary:['Core','Hip Flexors'],secondary:['Lower Back'],tip:'Reach hands and feet toward each other simultaneously.',why:'Advanced core strength builder.'},
   {id:40,name:'Chin-Up',duration:'8 min',type:'Strength',sets:'3 x max reps',primary:['Biceps','Lats'],secondary:['Core','Upper Back'],tip:'Palms facing you. Full hang to chin over bar.',why:'Builds bicep and back strength simultaneously.'}
 ];
 
@@ -869,10 +885,10 @@ function WorkoutScreen({setScreen,setEx,profile,user,setProfile,workouts,coachPr
   const [journalSaved,setJournalSaved]=useState(false);
   const [journalLoaded,setJournalLoaded]=useState(false);
   const [savingJournal,setSavingJournal]=useState(false);
-  const types=['All','Stretch','Pilates','Conditioning','Strength'];
-  const colors={Stretch:C.success,Pilates:'#A855F7',Flexibility:'#06B6D4',Conditioning:C.warning,Strength:C.blue};
-  const icons={Stretch:'🤸',Pilates:'🧘',Flexibility:'🌊',Conditioning:'⚡',Strength:'💪'};
-  const PHASE1_TYPES=['Stretch','Pilates','Conditioning'];
+  const types=['All','Stretch','Pilates','Core','Conditioning','Strength'];
+  const colors={Stretch:C.success,Pilates:'#A855F7',Core:'#EC4899',Flexibility:'#06B6D4',Conditioning:C.warning,Strength:C.blue};
+  const icons={Stretch:'🤸',Pilates:'🧘',Core:'🎯',Flexibility:'🌊',Conditioning:'⚡',Strength:'💪'};
+  const PHASE1_TYPES=['Stretch','Pilates','Core','Conditioning'];
   const phase1Workouts=workouts.filter(w=>PHASE1_TYPES.includes(w.type));
   const filtered=filter==='All'?phase1Workouts:phase1Workouts.filter(w=>w.type===filter);
 
@@ -949,11 +965,16 @@ function WorkoutScreen({setScreen,setEx,profile,user,setProfile,workouts,coachPr
   const buildWeek=async()=>{
     setLoadingPlan(true);
     const tier=profile?.tier||1;
-    const tp=getTierPlan(tier);
+    const tp=await fetchTierPlan(tier);
+    const categoryParts=[];
+    if(tp.stretch)categoryParts.push(tp.stretch+' Stretch');
+    if(tp.pilates)categoryParts.push(tp.pilates+' Pilates');
+    if(tp.core)categoryParts.push(tp.core+' Core');
+    if(tp.conditioning)categoryParts.push(tp.conditioning+' Conditioning');
     const list=phase1Workouts.map(w=>w.name+' ('+w.type+')').join(', ');
     const painAreas=(profile?.pain_areas||[]).join(', ')||'none listed';
     const msg='Build a 7-day workout plan (Monday through Sunday) using ONLY exercises from this list: '+list+
-      '. Each day needs exactly '+tp.total+' exercises: '+tp.stretch+' Stretch, '+tp.pilates+' Pilates, '+tp.conditioning+' Conditioning. You may reuse exercises across different days.'+
+      '. Each day needs exactly '+tp.total+' exercises: '+categoryParts.join(', ')+'. You may reuse exercises across different days.'+
       ' '+tp.tone+
       ' My known pain areas: '+painAreas+
       '. What I want to prioritize this week: '+(priority||'not specified')+
@@ -1102,7 +1123,7 @@ function ExerciseScreen({setScreen,exercise,user,profile,setProfile}){
   if(!exercise)return null;
   const mm=String(Math.floor(timer/60)).padStart(2,'0');
   const ss=String(timer%60).padStart(2,'0');
-  const colors={Stretch:C.success,Pilates:'#A855F7',Flexibility:'#06B6D4',Conditioning:C.warning,Strength:C.blue};
+  const colors={Stretch:C.success,Pilates:'#A855F7',Core:'#EC4899',Flexibility:'#06B6D4',Conditioning:C.warning,Strength:C.blue};
   const col=colors[exercise.type]||C.blue;
 
   return h('div',{style:{minHeight:'100vh',background:C.navy,padding:'54px 24px 40px'}},
@@ -1715,8 +1736,12 @@ function ProgressScreen({setScreen,user,profile,setProfile}){
   };
 
   const lastDate=profile?.last_photo_date;
-  const daysSince=lastDate?Math.floor((new Date()-new Date(lastDate))/(1000*60*60*24)):null;
-  const canUpload=!lastDate||daysSince>=7;
+  const now=new Date();
+  const weekStart=new Date(now);
+  weekStart.setHours(0,0,0,0);
+  weekStart.setDate(now.getDate()-now.getDay());
+  const canUpload=!lastDate||new Date(lastDate)<weekStart;
+  const daysUntilNext=(7-now.getDay())%7||7;
 
   return h('div',{style:{minHeight:'100vh',background:C.navy,padding:'54px 24px 100px'}},
     h('div',{style:{fontSize:11,color:C.blue,fontWeight:700,letterSpacing:2,marginBottom:4}},'BODY PROGRESS'),
@@ -1785,7 +1810,7 @@ function ProgressScreen({setScreen,user,profile,setProfile}){
       h('div',{style:{fontSize:11,color:C.silverDim,marginTop:8,textAlign:'center'}},readyCount===0?'Add at least one angle to continue.':(weight.trim()===''?'Enter your weight to continue.':'More angles = better feedback.'))
     ):h('div',{style:{background:C.navyLight,borderRadius:14,padding:20,textAlign:'center',border:'1px solid #2A3447',marginBottom:16}},
       h('div',{style:{fontSize:32,marginBottom:8}},'⏰'),
-      h('div',{style:{fontSize:14,fontWeight:700,color:C.silverBright}},'Next check-in in '+(7-daysSince)+' days'),
+      h('div',{style:{fontSize:14,fontWeight:700,color:C.silverBright}},'Next check-in '+(daysUntilNext===7?'this Sunday':'in '+daysUntilNext+' days')),
       h('div',{style:{fontSize:12,color:C.silverDim,marginTop:4}},'Weekly photo + weight, every Sunday night')
     ),
     h('div',{style:{background:'#3B82F610',border:'1px solid #3B82F630',borderRadius:14,padding:16,display:'flex',gap:12}},
@@ -1956,7 +1981,7 @@ function WorkoutsAdminTab({workouts,loadWorkouts}){
   const [uploading,setUploading]=useState(false);
   const [saving,setSaving]=useState(false);
   const fileRef=useRef(null);
-  const TYPES=['Stretch','Pilates','Flexibility','Conditioning','Strength'];
+  const TYPES=['Stretch','Pilates','Core','Flexibility','Conditioning','Strength'];
 
   const startEdit=(w)=>{
     setEditing(w?w.id:'new');
@@ -2145,7 +2170,7 @@ function CoachAdminTab({onSaved}){
 function ClientWorkoutEditor({client,workouts,onClose}){
   const DAY_KEYS=['mon','tue','wed','thu','fri','sat','sun'];
   const DAY_LABELS={mon:'Mon',tue:'Tue',wed:'Wed',thu:'Thu',fri:'Fri',sat:'Sat',sun:'Sun'};
-  const PHASE1_TYPES=['Stretch','Pilates','Conditioning'];
+  const PHASE1_TYPES=['Stretch','Pilates','Core','Conditioning'];
   const phase1Workouts=workouts.filter(w=>PHASE1_TYPES.includes(w.type));
   const [plan,setPlan]=useState({mon:{picks:[],reason:''},tue:{picks:[],reason:''},wed:{picks:[],reason:''},thu:{picks:[],reason:''},fri:{picks:[],reason:''},sat:{picks:[],reason:''},sun:{picks:[],reason:''}});
   const [selectedDay,setSelectedDay]=useState('mon');
@@ -2182,11 +2207,16 @@ function ClientWorkoutEditor({client,workouts,onClose}){
 
   const askAI=async()=>{
     setAskingAI(true);
-    const tp=getTierPlan(clientProfile?.tier||1);
+    const tp=await fetchTierPlan(clientProfile?.tier||1);
+    const categoryParts=[];
+    if(tp.stretch)categoryParts.push(tp.stretch+' Stretch');
+    if(tp.pilates)categoryParts.push(tp.pilates+' Pilates');
+    if(tp.core)categoryParts.push(tp.core+' Core');
+    if(tp.conditioning)categoryParts.push(tp.conditioning+' Conditioning');
     const list=phase1Workouts.map(w=>w.name+' ('+w.type+')').join(', ');
     const painAreas=(clientProfile?.pain_areas||[]).join(', ')||'none listed';
     const msg='Build a 7-day workout plan (Monday through Sunday) for a Phase '+(clientProfile?.phase||1)+' Tier '+(clientProfile?.tier||1)+' client using ONLY exercises from this list: '+list+
-      '. Each day needs exactly '+tp.total+' exercises: '+tp.stretch+' Stretch, '+tp.pilates+' Pilates, '+tp.conditioning+' Conditioning. You may reuse exercises across different days.'+
+      '. Each day needs exactly '+tp.total+' exercises: '+categoryParts.join(', ')+'. You may reuse exercises across different days.'+
       ' '+tp.tone+
       ' Known pain areas: '+painAreas+
       (clientProfile?.body_score?'. Current body score: '+clientProfile.body_score+'/100':'')+
