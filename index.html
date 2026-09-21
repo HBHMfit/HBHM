@@ -111,12 +111,12 @@ const S={
   LEADERBOARD:'leaderboard',PROFILE:'profile',TRAINER:'trainer'
 };
 
-const NONNEG_INCREMENTS={pushups:25,squats:25,calfraises:25,situps:15,crunches:15,vsits:10,sideplanks:10,pullups:5,chinups:5};
+const NONNEG_INCREMENTS={pushups:25,squats:25,calfraises:25,situps:15,crunches:15,vsits:10,sideplanks:10,pullups:5,chinups:5,run:0.25};
 
 const NONNEG_TIERS = {
-  1: [{id:'pushups',label:'Push-ups',target:25},{id:'chinups',label:'Chin-ups',target:5},{id:'pullups',label:'Pull-ups',target:5},{id:'situps',label:'Sit-ups',target:15},{id:'crunches',label:'Crunches',target:15},{id:'vsits',label:'V-Sits',target:15},{id:'sideplanks',label:'Side Planks',target:15,unit:'each side'},{id:'calfraises',label:'Calf Raises',target:25},{id:'squats',label:'Squats',target:25}],
-  2: [{id:'pushups',label:'Push-ups',target:35},{id:'chinups',label:'Chin-ups',target:7},{id:'pullups',label:'Pull-ups',target:7},{id:'situps',label:'Sit-ups',target:20},{id:'crunches',label:'Crunches',target:20},{id:'vsits',label:'V-Sits',target:20},{id:'sideplanks',label:'Side Planks',target:20,unit:'each side'},{id:'calfraises',label:'Calf Raises',target:35},{id:'squats',label:'Squats',target:35}],
-  3: [{id:'pushups',label:'Push-ups',target:50},{id:'chinups',label:'Chin-ups',target:10},{id:'pullups',label:'Pull-ups',target:10},{id:'situps',label:'Sit-ups',target:25},{id:'crunches',label:'Crunches',target:25},{id:'vsits',label:'V-Sits',target:25},{id:'sideplanks',label:'Side Planks',target:25,unit:'each side'},{id:'calfraises',label:'Calf Raises',target:50},{id:'squats',label:'Squats',target:50}]
+  1: [{id:'pushups',label:'Push-ups',target:25},{id:'chinups',label:'Chin-ups',target:5},{id:'pullups',label:'Pull-ups',target:5},{id:'situps',label:'Sit-ups',target:15},{id:'crunches',label:'Crunches',target:15},{id:'vsits',label:'V-Sits',target:15},{id:'sideplanks',label:'Side Planks',target:15,unit:'each side'},{id:'calfraises',label:'Calf Raises',target:25},{id:'squats',label:'Squats',target:25},{id:'run',label:'Run',target:0.5,unit:'miles'}],
+  2: [{id:'pushups',label:'Push-ups',target:35},{id:'chinups',label:'Chin-ups',target:7},{id:'pullups',label:'Pull-ups',target:7},{id:'situps',label:'Sit-ups',target:20},{id:'crunches',label:'Crunches',target:20},{id:'vsits',label:'V-Sits',target:20},{id:'sideplanks',label:'Side Planks',target:20,unit:'each side'},{id:'calfraises',label:'Calf Raises',target:35},{id:'squats',label:'Squats',target:35},{id:'run',label:'Run',target:1,unit:'miles'}],
+  3: [{id:'pushups',label:'Push-ups',target:50},{id:'chinups',label:'Chin-ups',target:10},{id:'pullups',label:'Pull-ups',target:10},{id:'situps',label:'Sit-ups',target:25},{id:'crunches',label:'Crunches',target:25},{id:'vsits',label:'V-Sits',target:25},{id:'sideplanks',label:'Side Planks',target:25,unit:'each side'},{id:'calfraises',label:'Calf Raises',target:50},{id:'squats',label:'Squats',target:50},{id:'run',label:'Run',target:1.5,unit:'miles'}]
 };
 
 const DISCIPLINE_ITEMS = [
@@ -333,14 +333,14 @@ function OnboardingFlow({setScreen,user,setProfile}){
 
   const finish=async()=>{
     await sb.from('profiles').update({
-      phase:1,tier:1,
+      phase:1,tier:1,tier_started_at:getLocalDate(),
       equipment:data.equipment,
       goal:data.goals.join(', '),
       age:parseInt(data.age)||null,
       height:data.height,
       weight:data.weight
     }).eq('id',user.id);
-    setProfile(p=>({...p,phase:1,tier:1}));
+    setProfile(p=>({...p,phase:1,tier:1,tier_started_at:getLocalDate()}));
     setScreen(S.PAYMENT);
   };
 
@@ -788,7 +788,7 @@ function DashScreen({setScreen,user,profile,setProfile,nonnegTiers}){
     if(!allBefore&&allAfter)ns=ns+1;
     if(allBefore&&!allAfter)ns=Math.max(0,ns-1);
     const updatePayload={points:np,streak:ns,last_active:today};
-    if(!allBefore&&allAfter&&ns>0&&ns%10===0){
+    if(!allBefore&&allAfter&&ns>0&&ns%5===0){
       const currentItems=freshProfile?.nonneg_items||profile?.nonneg_items;
       if(currentItems){
         updatePayload.nonneg_items=currentItems.map(it=>({...it,target:it.target+(it.increment||5)}));
@@ -1225,7 +1225,7 @@ function ExerciseScreen({setScreen,exercise,user,profile,setProfile}){
 
 const MINDSET_PROMPT=`You are Coach Skelly in Mindset mode for the HBHM (Healthy Body Healthy Mind) app. Right now you are not talking about workouts, reps, or nutrition targets - you are here to talk through discipline, motivation, and mindset with the client. Listen, ask real questions, help them think through what's actually going on in their head, and push them toward discipline and consistency without being preachy. You're supportive but still direct and honest, never soft or vague. Keep replies conversational and not too long. You are a coach helping with mindset, not a therapist - if something sounds like it goes beyond motivation and discipline into real emotional distress, gently encourage them to talk to a real person they trust or a professional, and keep the conversation grounded and supportive.`;
 
-function CoachScreen({setScreen,user,coachPrompt}){
+function CoachScreen({setScreen,user,profile,coachPrompt}){
   const TRAINING_WELCOME={role:'coach',text:"Welcome to Phase 1. Your joints, tendons, movement patterns - we fix these FIRST. Daily non-negotiables, food logging, weekly body photo. No exceptions. Ask me anything."};
   const MINDSET_WELCOME={role:'coach',text:"This is your space to talk mindset - discipline, motivation, where your head's at. What's going on with you today?"};
   const [mode,setMode]=useState('training');
@@ -1236,6 +1236,25 @@ function CoachScreen({setScreen,user,coachPrompt}){
 
   const table=mode==='training'?'coach_messages':'mindset_messages';
   const welcomeMsg=mode==='training'?TRAINING_WELCOME:MINDSET_WELCOME;
+
+  const buildClientContext=()=>{
+    if(!profile)return'';
+    const parts=[];
+    parts.push('Phase '+(profile.phase||1)+', Tier '+(profile.tier||1)+'.');
+    if(profile.fitness_test){
+      const t=profile.fitness_test;
+      parts.push('Initial fitness test results: '+(t.pushups||0)+' push-ups, '+(t.pullups||0)+' pull-ups, '+(t.chinups||0)+' chin-ups, '+(t.squats||0)+' squats, '+(t.dips||0)+' dips, ran '+(t.run_distance||'?')+' miles before stopping. Fitness level: '+(t.level||'unknown')+'.');
+    }
+    if(profile.pain_areas&&profile.pain_areas.length>0){
+      parts.push('Known pain/discomfort areas: '+profile.pain_areas.join(', ')+'. Take these seriously when giving advice - modify or avoid movements that would aggravate these.');
+    }
+    if(profile.nonneg_items&&profile.nonneg_items.length>0){
+      parts.push('Current daily non-negotiable targets: '+profile.nonneg_items.map(it=>it.label+' '+it.target+(it.unit?' '+it.unit:'')).join(', ')+'.');
+    }
+    if(profile.streak!=null)parts.push('Current streak: '+profile.streak+' days.');
+    if(profile.body_score)parts.push('Latest body score: '+profile.body_score+'/100.');
+    return parts.length?'\n\nCLIENT CONTEXT (use this to answer specifically, not generically): '+parts.join(' '):'';
+  };
 
   useEffect(()=>{if(bottomRef.current)bottomRef.current.scrollIntoView({behavior:'smooth'});},[msgs]);
 
@@ -1262,7 +1281,7 @@ function CoachScreen({setScreen,user,coachPrompt}){
     saveMessage('user',msg);
     try{
       const history=msgs.map(m=>({role:m.role==='coach'?'assistant':'user',content:m.text}));
-      const activePrompt=mode==='mindset'?MINDSET_PROMPT:(coachPrompt||undefined);
+      const activePrompt=mode==='mindset'?MINDSET_PROMPT:((coachPrompt||'')+buildClientContext());
       const res=await fetch(SB_URL+'/functions/v1/Coach-Skelly',{
         method:'POST',
         headers:{'Content-Type':'application/json','Authorization':'Bearer '+SB_ANON,'apikey':SB_ANON},
@@ -2320,7 +2339,7 @@ function ClientsAdminTab({workouts}){
 
   const changeTier=async(clientId,newTier)=>{
     setSavingId(clientId);
-    await sb.from('profiles').update({tier:newTier}).eq('id',clientId);
+    await sb.from('profiles').update({tier:newTier,tier_started_at:getLocalDate()}).eq('id',clientId);
     setClients(cs=>cs.map(c=>c.id===clientId?{...c,tier:newTier}:c));
     setSavingId(null);
   };
@@ -2418,6 +2437,22 @@ function App(){
     return data;
   };
 
+  const checkTierProgress=async(prof)=>{
+    if(!prof||prof.phase!==1||!prof.tier_started_at)return prof;
+    if(prof.tier>=3)return prof;
+    const started=new Date(prof.tier_started_at);
+    const daysElapsed=Math.floor((new Date()-started)/(1000*60*60*24));
+    if(daysElapsed>=30){
+      const newTier=prof.tier+1;
+      const today=getLocalDate();
+      await sb.from('profiles').update({tier:newTier,tier_started_at:today}).eq('id',prof.id);
+      const updated={...prof,tier:newTier,tier_started_at:today};
+      setProfile(updated);
+      return updated;
+    }
+    return prof;
+  };
+
   const loadWorkouts=async()=>{
     const{data}=await sb.from('workouts').select('*').order('id',{ascending:true});
     if(data){
@@ -2446,7 +2481,8 @@ function App(){
     sb.auth.getSession().then(async({data:{session}})=>{
       if(session?.user){
         setUser(session.user);
-        const prof=await loadProfile(session.user.id);
+        let prof=await loadProfile(session.user.id);
+        prof=await checkTierProgress(prof);
         setScreen(prof?.is_paid?(prof?.nonneg_items?S.DASH:S.ASSESSMENT):S.PAYMENT);
       } else {
         setScreen(S.AUTH);
@@ -2473,7 +2509,7 @@ function App(){
       case S.DASH:return h(DashScreen,{setScreen,user,profile,setProfile,nonnegTiers});
       case S.WORKOUT:return h(WorkoutScreen,{setScreen,setEx,profile,user,setProfile,workouts,coachPrompt});
       case S.EXERCISE:return h(ExerciseScreen,{setScreen,exercise:ex,user,profile,setProfile});
-      case S.COACH:return h(CoachScreen,{setScreen,user,coachPrompt});
+      case S.COACH:return h(CoachScreen,{setScreen,user,profile,coachPrompt});
       case S.NUTRITION:return h(NutritionScreen,{setScreen,user,profile,setProfile,coachPrompt});
       case S.PROGRESS:return h(ProgressScreen,{setScreen,user,profile,setProfile});
       case S.LEADERBOARD:return h(LeaderboardScreen,{setScreen,profile});
