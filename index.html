@@ -84,7 +84,7 @@ function getTierPlanFallback(tier){
     tone:"This is Tier 2 - Bridge to Intensity. Core and Pilates-centric focus with more conditioning and sweat than Tier 1."
   };
   return{
-    stretch:4,pilates:3,core:2,conditioning:3,total:12,
+    stretch:4,pilates:3,core:2,bodycontrol:2,conditioning:3,total:14,
     tone:"This is Tier 1 - Master the Foundation. Keep intensity appropriate to the client's fitness level, but do NOT default to only the most basic movements in the list."
   };
 }
@@ -97,7 +97,8 @@ async function fetchTierPlan(tier){
     const pilates=data.pilates||0;
     const core=data.core||0;
     const conditioning=data.conditioning||0;
-    return{stretch,pilates,core,conditioning,total:stretch+pilates+core+conditioning,tone:data.tone||''};
+    const bodycontrol=data.body_control||0;
+    return{stretch,pilates,core,bodycontrol,conditioning,total:stretch+pilates+core+bodycontrol+conditioning,tone:data.tone||''};
   }catch(e){
     return getTierPlanFallback(tier);
   }
@@ -1091,10 +1092,10 @@ function WorkoutScreen({setScreen,setEx,profile,user,setProfile,workouts,coachPr
   const [journalSaved,setJournalSaved]=useState(false);
   const [journalLoaded,setJournalLoaded]=useState(false);
   const [savingJournal,setSavingJournal]=useState(false);
-  const types=['All','Stretch','Pilates','Core','Conditioning','Strength'];
-  const colors={Stretch:C.success,Pilates:'#A855F7',Core:'#EC4899',Flexibility:'#06B6D4',Conditioning:C.warning,Strength:C.blue};
-  const icons={Stretch:'🤸',Pilates:'🧘',Core:'🎯',Flexibility:'🌊',Conditioning:'⚡',Strength:'💪'};
-  const PHASE1_TYPES=['Stretch','Pilates','Core','Conditioning'];
+  const types=['All','Stretch','Pilates','Core','Body Control','Conditioning','Strength'];
+  const colors={Stretch:C.success,Pilates:'#A855F7',Core:'#EC4899','Body Control':'#14B8A6',Flexibility:'#06B6D4',Conditioning:C.warning,Strength:C.blue};
+  const icons={Stretch:'🤸',Pilates:'🧘',Core:'🎯','Body Control':'🧍',Flexibility:'🌊',Conditioning:'⚡',Strength:'💪'};
+  const PHASE1_TYPES=['Stretch','Pilates','Core','Body Control','Conditioning'];
   const phase1Workouts=workouts.filter(w=>PHASE1_TYPES.includes(w.type));
   const filtered=filter==='All'?phase1Workouts:phase1Workouts.filter(w=>w.type===filter);
 
@@ -1178,8 +1179,9 @@ function WorkoutScreen({setScreen,setEx,profile,user,setProfile,workouts,coachPr
     if(tp.stretch)categoryParts.push(tp.stretch+' Stretch');
     if(tp.pilates)categoryParts.push(tp.pilates+' Pilates');
     if(tp.core)categoryParts.push(tp.core+' Core');
+    if(tp.bodycontrol)categoryParts.push(tp.bodycontrol+' Body Control');
     if(tp.conditioning)categoryParts.push(tp.conditioning+' Conditioning');
-    const total=tp.stretch+tp.pilates+(tp.core||0)+tp.conditioning;
+    const total=tp.stretch+tp.pilates+(tp.core||0)+(tp.bodycontrol||0)+tp.conditioning;
     const list=phase1Workouts.map(w=>w.name+' ('+w.type+')').join(', ');
     const painAreas=(profile?.pain_areas||[]).join(', ')||'none listed';
     const strongNote=isStrong?' This client tested strong on their initial fitness test ('+(profile.fitness_test.pushups||0)+' push-ups, '+(profile.fitness_test.squats||0)+' squats, '+(profile.fitness_test.pullups||0)+' pull-ups) - give them 2 bonus Conditioning exercises today beyond the normal count, and lean toward harder variations throughout. Never let them feel under-challenged.':'';
@@ -1332,7 +1334,7 @@ function ExerciseScreen({setScreen,exercise,user,profile,setProfile}){
   if(!exercise)return null;
   const mm=String(Math.floor(timer/60)).padStart(2,'0');
   const ss=String(timer%60).padStart(2,'0');
-  const colors={Stretch:C.success,Pilates:'#A855F7',Core:'#EC4899',Flexibility:'#06B6D4',Conditioning:C.warning,Strength:C.blue};
+  const colors={Stretch:C.success,Pilates:'#A855F7',Core:'#EC4899','Body Control':'#14B8A6',Flexibility:'#06B6D4',Conditioning:C.warning,Strength:C.blue};
   const col=colors[exercise.type]||C.blue;
 
   return h('div',{style:{minHeight:'100vh',background:C.navy,padding:'54px 24px 40px'}},
@@ -2206,7 +2208,7 @@ function WorkoutsAdminTab({workouts,loadWorkouts}){
   const [uploading,setUploading]=useState(false);
   const [saving,setSaving]=useState(false);
   const fileRef=useRef(null);
-  const TYPES=['Stretch','Pilates','Core','Flexibility','Conditioning','Strength'];
+  const TYPES=['Stretch','Pilates','Core','Body Control','Flexibility','Conditioning','Strength'];
 
   const startEdit=(w)=>{
     setEditing(w?w.id:'new');
@@ -2395,7 +2397,7 @@ function CoachAdminTab({onSaved}){
 function ClientWorkoutEditor({client,workouts,onClose}){
   const DAY_KEYS=['mon','tue','wed','thu','fri','sat','sun'];
   const DAY_LABELS={mon:'Mon',tue:'Tue',wed:'Wed',thu:'Thu',fri:'Fri',sat:'Sat',sun:'Sun'};
-  const PHASE1_TYPES=['Stretch','Pilates','Core','Conditioning'];
+  const PHASE1_TYPES=['Stretch','Pilates','Core','Body Control','Conditioning'];
   const phase1Workouts=workouts.filter(w=>PHASE1_TYPES.includes(w.type));
   const [plan,setPlan]=useState({mon:{picks:[],reason:''},tue:{picks:[],reason:''},wed:{picks:[],reason:''},thu:{picks:[],reason:''},fri:{picks:[],reason:''},sat:{picks:[],reason:''},sun:{picks:[],reason:''}});
   const [selectedDay,setSelectedDay]=useState('mon');
@@ -2437,6 +2439,7 @@ function ClientWorkoutEditor({client,workouts,onClose}){
     if(tp.stretch)categoryParts.push(tp.stretch+' Stretch');
     if(tp.pilates)categoryParts.push(tp.pilates+' Pilates');
     if(tp.core)categoryParts.push(tp.core+' Core');
+    if(tp.bodycontrol)categoryParts.push(tp.bodycontrol+' Body Control');
     if(tp.conditioning)categoryParts.push(tp.conditioning+' Conditioning');
     const list=phase1Workouts.map(w=>w.name+' ('+w.type+')').join(', ');
     const painAreas=(clientProfile?.pain_areas||[]).join(', ')||'none listed';
