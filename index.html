@@ -109,15 +109,15 @@ const S={
   ONBOARDING:'onboarding',PAYMENT:'payment',ASSESSMENT:'assessment',
   DASH:'dash',WORKOUT:'workout',EXERCISE:'exercise',
   COACH:'coach',NUTRITION:'nutrition',PROGRESS:'progress',
-  LEADERBOARD:'leaderboard',PROFILE:'profile',TRAINER:'trainer',GRADES:'grades'
+  LEADERBOARD:'leaderboard',PROFILE:'profile',TRAINER:'trainer',GRADES:'grades',MAKEUP:'makeup'
 };
 
-const NONNEG_INCREMENTS={pushups:10,squats:10,calfraises:25,situps:25,crunches:25,vsits:20,sideplanks:20,pullups:5,chinups:5,run:0.25};
+const NONNEG_INCREMENTS={pushups:10,dips:5,squats:10,calfraises:25,situps:25,crunches:25,vsits:20,sideplanks:20,pullups:5,chinups:5,run:0.25};
 
 const NONNEG_TIERS = {
-  1: [{id:'pushups',label:'Push-ups',target:25},{id:'chinups',label:'Chin-ups',target:5},{id:'pullups',label:'Pull-ups',target:5},{id:'situps',label:'Sit-ups',target:15},{id:'crunches',label:'Crunches',target:15},{id:'vsits',label:'V-Sits',target:15},{id:'sideplanks',label:'Side Planks',target:15,unit:'each side'},{id:'calfraises',label:'Calf Raises',target:25},{id:'squats',label:'Squats',target:25},{id:'run',label:'Run',target:0.5,unit:'miles'}],
-  2: [{id:'pushups',label:'Push-ups',target:35},{id:'chinups',label:'Chin-ups',target:7},{id:'pullups',label:'Pull-ups',target:7},{id:'situps',label:'Sit-ups',target:20},{id:'crunches',label:'Crunches',target:20},{id:'vsits',label:'V-Sits',target:20},{id:'sideplanks',label:'Side Planks',target:20,unit:'each side'},{id:'calfraises',label:'Calf Raises',target:35},{id:'squats',label:'Squats',target:35},{id:'run',label:'Run',target:1,unit:'miles'}],
-  3: [{id:'pushups',label:'Push-ups',target:50},{id:'chinups',label:'Chin-ups',target:10},{id:'pullups',label:'Pull-ups',target:10},{id:'situps',label:'Sit-ups',target:25},{id:'crunches',label:'Crunches',target:25},{id:'vsits',label:'V-Sits',target:25},{id:'sideplanks',label:'Side Planks',target:25,unit:'each side'},{id:'calfraises',label:'Calf Raises',target:50},{id:'squats',label:'Squats',target:50},{id:'run',label:'Run',target:1.5,unit:'miles'}]
+  1: [{id:'pushups',label:'Push-ups',target:25},{id:'dips',label:'Dips',target:10},{id:'chinups',label:'Chin-ups',target:5},{id:'pullups',label:'Pull-ups',target:5},{id:'situps',label:'Sit-ups',target:15},{id:'crunches',label:'Crunches',target:15},{id:'vsits',label:'V-Sits',target:15},{id:'sideplanks',label:'Side Planks',target:15,unit:'each side'},{id:'calfraises',label:'Calf Raises',target:25},{id:'squats',label:'Squats',target:25},{id:'run',label:'Run',target:0.5,unit:'miles'}],
+  2: [{id:'pushups',label:'Push-ups',target:35},{id:'dips',label:'Dips',target:15},{id:'chinups',label:'Chin-ups',target:7},{id:'pullups',label:'Pull-ups',target:7},{id:'situps',label:'Sit-ups',target:20},{id:'crunches',label:'Crunches',target:20},{id:'vsits',label:'V-Sits',target:20},{id:'sideplanks',label:'Side Planks',target:20,unit:'each side'},{id:'calfraises',label:'Calf Raises',target:35},{id:'squats',label:'Squats',target:35},{id:'run',label:'Run',target:1,unit:'miles'}],
+  3: [{id:'pushups',label:'Push-ups',target:50},{id:'dips',label:'Dips',target:20},{id:'chinups',label:'Chin-ups',target:10},{id:'pullups',label:'Pull-ups',target:10},{id:'situps',label:'Sit-ups',target:25},{id:'crunches',label:'Crunches',target:25},{id:'vsits',label:'V-Sits',target:25},{id:'sideplanks',label:'Side Planks',target:25,unit:'each side'},{id:'calfraises',label:'Calf Raises',target:50},{id:'squats',label:'Squats',target:50},{id:'run',label:'Run',target:1.5,unit:'miles'}]
 };
 
 const DISCIPLINE_ITEMS = [
@@ -555,7 +555,7 @@ function AssessmentScreen({setScreen,user,profile,setProfile}){
         'What they want from this program: '+wantFromProgram+'. '+
         (bodyNote?bodyNote+'. ':'')+
         'Set realistic, honest STARTING daily non-negotiable targets based on these REAL test numbers - someone who just did 40 push-ups should NOT get a target of 5. Scale targets to roughly 60-70% of their tested max so it is achievable daily but still real. Exercises: '+itemList+
-        '. Respond with ONLY JSON, no other text, mapping each exercise id to a starting number, like: {"pushups":25,"chinups":5,"pullups":5,"situps":15,"crunches":15,"vsits":15,"sideplanks":15,"calfraises":25,"squats":25}';
+        '. Respond with ONLY JSON, no other text, mapping each exercise id to a starting number, like: {"pushups":25,"dips":10,"chinups":5,"pullups":5,"situps":15,"crunches":15,"vsits":15,"sideplanks":15,"calfraises":25,"squats":25}';
       const res2=await fetch(SB_URL+'/functions/v1/Coach-Skelly',{
         method:'POST',
         headers:{'Content-Type':'application/json','Authorization':'Bearer '+SB_ANON,'apikey':SB_ANON},
@@ -684,7 +684,30 @@ function getTierDays(profile){
 
 const GRADE_WEIGHTS={nonneg:50,workout:25,food:15,disc:10};
 
-function computeTierGrade(days,logs,items){
+function computeMakeup(days,logs,items,paid){
+  const byDate={};
+  (logs||[]).forEach(l=>{byDate[l.date]=l;});
+  const graded=days.filter(d=>d.past);
+  const perItem=(items||[]).map(it=>{
+    let totalTarget=0,shortfall=0;
+    graded.forEach(d=>{
+      const l=byDate[d.date];
+      const tgt=Number((l&&l.nonneg_targets&&l.nonneg_targets[it.id])??it.target)||0;
+      const completed=!!(l&&l.nonneg_completed&&l.nonneg_completed[it.id]);
+      const r=l&&l.nonneg_reps&&l.nonneg_reps[it.id];
+      const done=completed?tgt:Math.min(Number(r)||0,tgt);
+      totalTarget+=tgt;
+      shortfall+=Math.max(0,tgt-done);
+    });
+    const paidReps=(paid||[]).filter(x=>x.item_id===it.id).reduce((a,x)=>a+(Number(x.reps)||0),0);
+    const owed=Math.max(0,Math.round((shortfall-paidReps)*100)/100);
+    return{id:it.id,label:it.label,unit:it.unit||'reps',totalTarget,shortfall,paid:paidReps,owed};
+  });
+  const totalOwed=perItem.reduce((a,x)=>a+x.owed,0);
+  return{perItem,totalOwed,ownedCount:perItem.filter(x=>x.owed>0).length};
+}
+
+function computeTierGrade(days,logs,items,paid){
   const byDate={};
   (logs||[]).forEach(l=>{byDate[l.date]=l;});
   const ids=(items||[]).map(it=>it.id);
@@ -697,7 +720,13 @@ function computeTierGrade(days,logs,items){
     const l=byDate[d.date];
     const nn=(l&&l.nonneg_completed)||{};
     const done=ids.filter(id=>nn[id]).length;
-    const nnScore=ids.length?done/ids.length:0;
+    const nr=(l&&l.nonneg_reps)||{};
+    const nt=(l&&l.nonneg_targets)||{};
+    const nnScore=ids.length?(items||[]).reduce((a,it)=>{
+      if(nn[it.id])return a+1;
+      const tgt=Number(nt[it.id]??it.target)||0;
+      return a+(tgt>0?Math.min(1,(Number(nr[it.id])||0)/tgt):0);
+    },0)/ids.length:0;
     ids.forEach(id=>{if(!nn[id])missed[id]++;});
     cat.nonneg.push(nnScore);
     dayStatus[d.date]=nnScore;
@@ -711,8 +740,11 @@ function computeTierGrade(days,logs,items){
     cat.disc.push(DISCIPLINE_ITEMS.filter(it=>dc[it.id]).length/DISCIPLINE_ITEMS.length);
   });
   const avg=a=>a.length?a.reduce((s,x)=>s+x,0)/a.length:null;
+  const mk=computeMakeup(days,logs,items,paid);
+  const nnItems=mk.perItem.filter(x=>x.totalTarget>0);
+  const nonnegAvg=graded.length&&nnItems.length?nnItems.reduce((a,x)=>a+(1-Math.min(1,x.owed/x.totalTarget)),0)/nnItems.length:avg(cat.nonneg);
   const cats=[
-    {key:'nonneg',label:'Non-negotiables',weight:GRADE_WEIGHTS.nonneg,avg:avg(cat.nonneg)},
+    {key:'nonneg',label:'Non-negotiables',weight:GRADE_WEIGHTS.nonneg,avg:nonnegAvg},
     {key:'workout',label:'Workouts',weight:GRADE_WEIGHTS.workout,avg:avg(cat.workout)},
     {key:'food',label:'Food logging',weight:GRADE_WEIGHTS.food,avg:avg(cat.food)},
     {key:'disc',label:'Daily discipline',weight:GRADE_WEIGHTS.disc,avg:avg(cat.disc)}
@@ -721,13 +753,21 @@ function computeTierGrade(days,logs,items){
   const totalWeight=counted.reduce((s,c)=>s+c.weight,0);
   const pct=graded.length>0&&totalWeight>0?Math.round(counted.reduce((s,c)=>s+c.weight*c.avg,0)/totalWeight*100):null;
   const missedList=(items||[]).map(it=>({label:it.label,unit:it.unit,missed:missed[it.id]||0})).filter(m=>m.missed>0).sort((a,b)=>b.missed-a.missed);
-  return{pct,letter:pct!==null?getGrade(pct):null,cats,missedList,dayStatus,gradedDays:graded.length};
+  return{pct,letter:pct!==null?getGrade(pct):null,cats,missedList,dayStatus,gradedDays:graded.length,makeup:mk};
 }
 
 async function loadTierGrade(user,profile,items){
   const days=getTierDays(profile);
-  const{data}=await sb.from('daily_logs').select('date,nonneg_completed,workout_picks,workout_picks_completed,meals,discipline_completed').eq('user_id',user.id).gte('date',days[0].date).lte('date',days[days.length-1].date);
-  return{days,grade:computeTierGrade(days,data,items)};
+  const base='date,nonneg_completed,workout_picks,workout_picks_completed,meals,discipline_completed';
+  const q=cols=>sb.from('daily_logs').select(cols).eq('user_id',user.id).gte('date',days[0].date).lte('date',days[days.length-1].date);
+  let{data,error}=await q(base+',nonneg_reps,nonneg_targets');
+  if(error){const r=await q(base);data=r.data;}
+  let paid=[];
+  try{
+    const r=await sb.from('makeup_log').select('item_id,reps,date').eq('user_id',user.id).gte('date',days[0].date).lte('date',days[days.length-1].date);
+    if(!r.error&&r.data)paid=r.data;
+  }catch(e){}
+  return{days,grade:computeTierGrade(days,data,items,paid),paid};
 }
 
 const PASS_PCT=70;
@@ -748,6 +788,59 @@ async function saveTierSnapshot(prof,days,grade,outcome){
     fitness_test:prof.fitness_test||null
   };
   await sb.from('tier_history').upsert(payload,{onConflict:'user_id,phase,tier,started_at'});
+}
+
+function MakeupScreen({setScreen,user,profile}){
+  const items=profile?.nonneg_items||NONNEG_TIERS[profile?.tier||1];
+  const [info,setInfo]=useState(null);
+  const [vals,setVals]=useState({});
+  const [busy,setBusy]=useState(null);
+  const [msg,setMsg]=useState('');
+
+  const load=()=>{
+    if(!user||!profile)return;
+    loadTierGrade(user,profile,items).then(r=>setInfo(r.grade&&r.grade.makeup?r.grade:null));
+  };
+  useEffect(load,[user,profile?.tier_started_at]);
+
+  const pay=async(row)=>{
+    const n=Math.max(0,parseFloat(vals[row.id])||0);
+    if(!n)return;
+    const reps=Math.min(n,row.owed);
+    setBusy(row.id);setMsg('');
+    const{error}=await sb.from('makeup_log').insert({user_id:user.id,item_id:row.id,reps,date:getLocalDate()});
+    if(error){setMsg("Couldn't save that. The makeup table may not be set up yet.");}
+    else{setVals(v=>({...v,[row.id]:''}));load();}
+    setBusy(null);
+  };
+
+  const mk=info?info.makeup:null;
+  const rows=mk?mk.perItem.filter(x=>x.owed>0):[];
+
+  return h('div',{style:{minHeight:'100vh',background:C.navy,padding:'54px 24px 100px'}},
+    h('button',{onClick:()=>setScreen(S.DASH),className:'btn',style:{background:'none',color:C.blue,fontSize:13,fontWeight:700,marginBottom:20,padding:0}},'Back to Home'),
+    h('div',{style:{fontSize:11,color:C.warning,fontWeight:700,letterSpacing:2,marginBottom:4}},'MAKEUP WORK'),
+    h('div',{style:{fontSize:26,fontWeight:900,color:C.silverBright,marginBottom:6}},'What you owe'),
+    h('div',{style:{fontSize:12,color:C.silverDim,lineHeight:1.5,marginBottom:20}},'Every rep you skip or fall short on goes here. Pay it back and your Non-negotiables grade goes back up. No daily limit.'),
+    !mk&&h('div',{style:{color:C.silverDim,fontSize:13}},'Loading...'),
+    mk&&rows.length===0&&h('div',{style:{background:C.navyLight,borderRadius:16,padding:24,textAlign:'center',border:'1px solid #2A3447'}},
+      h('div',{style:{fontSize:32,marginBottom:8}},'✅'),
+      h('div',{style:{fontSize:14,color:C.silverBright,fontWeight:700}},'Nothing owed.'),
+      h('div',{style:{fontSize:12,color:C.silverDim,marginTop:6}},'Keep it that way.')
+    ),
+    rows.map(row=>h('div',{key:row.id,style:{background:C.navyLight,borderRadius:14,padding:'14px 16px',border:'1px solid #F59E0B40',marginBottom:10}},
+      h('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'baseline',marginBottom:10}},
+        h('div',{style:{fontSize:15,fontWeight:800,color:C.silverBright}},row.label),
+        h('div',{style:{fontSize:15,fontWeight:900,color:C.warning}},row.owed+' ',h('span',{style:{fontSize:10,color:C.silverDim,fontWeight:700}},row.unit+' owed'))
+      ),
+      h('div',{style:{display:'flex',gap:8}},
+        h('input',{type:'number',inputMode:'decimal',value:vals[row.id]||'',onChange:e=>setVals(v=>({...v,[row.id]:e.target.value})),placeholder:'Reps you just did',style:{flex:1,padding:'10px 12px',background:C.navy,border:'1.5px solid '+C.border,borderRadius:10,color:C.white,fontSize:14,fontWeight:700,outline:'none'}}),
+        h('button',{onClick:()=>pay(row),disabled:busy===row.id,className:'btn',style:{padding:'10px 16px',background:'linear-gradient(135deg,#16A34A,#22C55E)',borderRadius:10,color:'#fff',fontSize:13,fontWeight:800}},busy===row.id?'...':'LOG')
+      )
+    )),
+    msg&&h('div',{style:{color:C.danger,fontSize:12,marginTop:8}},msg),
+    h(BottomNav,{screen:S.DASH,setScreen})
+  );
 }
 
 function GradesScreen({setScreen,user,profile}){
@@ -843,6 +936,12 @@ function DashScreen({setScreen,user,profile,setProfile,nonnegTiers,tierNotice,se
   const tier=profile?.tier||1;
   const TIERS=nonnegTiers||NONNEG_TIERS;
   const NONNEG=profile?.nonneg_items||TIERS[tier]||TIERS[1];
+  const toggleLock=useRef(false);
+  const repsRef=useRef({});
+  const [reps,setReps]=useState({});
+  const [repsFor,setRepsFor]=useState(null);
+  const [repsVal,setRepsVal]=useState('');
+  const [makeupOwed,setMakeupOwed]=useState(null);
   const [checked,setChecked]=useState({});
   const [disciplineChecked,setDisciplineChecked]=useState({});
   const [saving,setSaving]=useState(false);
@@ -851,7 +950,7 @@ function DashScreen({setScreen,user,profile,setProfile,nonnegTiers,tierNotice,se
 
   useEffect(()=>{
     if(!user||!profile)return;
-    loadTierGrade(user,profile,NONNEG).then(r=>setTierGrade(r.grade));
+    loadTierGrade(user,profile,NONNEG).then(r=>{setTierGrade(r.grade);setMakeupOwed(r.grade&&r.grade.makeup?r.grade.makeup.totalOwed:null);});
   },[user,today,profile?.tier_started_at,profile?.tier]);
 
   useEffect(()=>{
@@ -871,6 +970,9 @@ function DashScreen({setScreen,user,profile,setProfile,nonnegTiers,tierNotice,se
     sb.from('daily_logs').select('nonneg_completed,discipline_completed').eq('user_id',user.id).eq('date',today).maybeSingle().then(({data})=>{
       setChecked(data?.nonneg_completed||{});
       setDisciplineChecked(data?.discipline_completed||{});
+    });
+    sb.from('daily_logs').select('nonneg_reps').eq('user_id',user.id).eq('date',today).maybeSingle().then(({data,error})=>{
+      if(!error){repsRef.current=data?.nonneg_reps||{};setReps(repsRef.current);}
     });
     applyDailyPenalties();
   },[user,today]);
@@ -941,12 +1043,40 @@ function DashScreen({setScreen,user,profile,setProfile,nonnegTiers,tierNotice,se
     setProfile(p=>({...p,points:np}));
   };
 
+  const persistReps=async(id,val)=>{
+    const next={...repsRef.current};
+    if(val===null||val===undefined)delete next[id];else next[id]=val;
+    repsRef.current=next;setReps(next);
+    const targets={};NONNEG.forEach(it=>{targets[it.id]=it.target;});
+    try{await sb.from('daily_logs').upsert({user_id:user.id,date:today,nonneg_reps:next,nonneg_targets:targets},{onConflict:'user_id,date'});}catch(e){}
+  };
+
+  const saveRepsEntry=async()=>{
+    const item=repsFor;if(!item)return;
+    const n=Math.max(0,parseFloat(repsVal)||0);
+    setRepsFor(null);
+    const isDone=!!checked[item.id];
+    if(n>=item.target){
+      if(!isDone)await toggle(item.id);
+      await persistReps(item.id,item.target);
+    }else{
+      if(isDone)await toggle(item.id);
+      await persistReps(item.id,n);
+    }
+  };
+
   const toggle=async(id)=>{
-    const wasChecked=!!checked[id];
-    const newChecked={...checked,[id]:!wasChecked};
+    if(toggleLock.current)return;
+    toggleLock.current=true;
+    try{
+    const{data:logRow}=await sb.from('daily_logs').select('nonneg_completed').eq('user_id',user.id).eq('date',today).maybeSingle();
+    const current=logRow?.nonneg_completed||checked;
+    const wasChecked=!!current[id];
+    const newChecked={...current,[id]:!wasChecked};
     setChecked(newChecked);setSaving(true);
-    const doneBefore=Object.values(checked).filter(Boolean).length;
-    const doneAfter=Object.values(newChecked).filter(Boolean).length;
+    const countDone=m=>NONNEG.filter(it=>m[it.id]).length;
+    const doneBefore=countDone(current);
+    const doneAfter=countDone(newChecked);
     const allBefore=doneBefore===NONNEG.length;
     const allAfter=doneAfter===NONNEG.length;
     let pointsDelta=wasChecked?-5:5;
@@ -971,8 +1101,17 @@ function DashScreen({setScreen,user,profile,setProfile,nonnegTiers,tierNotice,se
       }
     }
     await sb.from('profiles').update(updatePayload).eq('id',user.id);
+    {
+      const it=NONNEG.find(x=>x.id===id);
+      const nextReps={...repsRef.current};
+      if(newChecked[id]&&it)nextReps[id]=it.target;else delete nextReps[id];
+      repsRef.current=nextReps;setReps(nextReps);
+      const targets={};NONNEG.forEach(x=>{targets[x.id]=x.target;});
+      try{await sb.from('daily_logs').upsert({user_id:user.id,date:today,nonneg_reps:nextReps,nonneg_targets:targets},{onConflict:'user_id,date'});}catch(e){}
+    }
     setProfile(p=>({...p,points:np,streak:ns,...(updatePayload.nonneg_items?{nonneg_items:updatePayload.nonneg_items}:{})}));
     setSaving(false);
+    }finally{toggleLock.current=false;}
   };
 
   const done=Object.values(checked).filter(Boolean).length;
@@ -982,6 +1121,16 @@ function DashScreen({setScreen,user,profile,setProfile,nonnegTiers,tierNotice,se
   const first=profile?.full_name?.split(' ')[0]?.toUpperCase()||'ATHLETE';
 
   return h('div',{style:{minHeight:'100vh',background:C.navy,paddingBottom:100}},
+    repsFor&&h('div',{onClick:()=>setRepsFor(null),style:{position:'fixed',inset:0,background:'rgba(0,0,0,0.7)',zIndex:50,display:'flex',alignItems:'flex-end',justifyContent:'center'}},
+      h('div',{onClick:e=>e.stopPropagation(),style:{width:'100%',maxWidth:430,background:C.navyMid,borderRadius:'20px 20px 0 0',padding:'24px 24px 36px',border:'1px solid #2A3447'}},
+        h('div',{style:{fontSize:11,color:C.blue,fontWeight:700,letterSpacing:1.5,marginBottom:4}},'LOG REPS'),
+        h('div',{style:{fontSize:20,fontWeight:900,color:C.silverBright,marginBottom:4}},repsFor.label),
+        h('div',{style:{fontSize:12,color:C.silverDim,marginBottom:16}},'Target: '+repsFor.target+' '+(repsFor.unit||'reps')+'. Do less and the rest goes to your Makeup Work. Your streak resets if you do not hit the full target by midnight.'),
+        h('input',{type:'number',inputMode:'decimal',autoFocus:true,value:repsVal,onChange:e=>setRepsVal(e.target.value),placeholder:'How many did you do?',style:{width:'100%',padding:'14px 16px',background:C.navyLight,border:'1.5px solid '+C.border,borderRadius:12,color:C.white,fontSize:18,fontWeight:800,marginBottom:12,outline:'none'}}),
+        h('button',{onClick:saveRepsEntry,className:'btn',style:{width:'100%',padding:'14px',background:'linear-gradient(135deg,#1D4ED8,#3B82F6)',borderRadius:12,color:'#fff',fontSize:14,fontWeight:800,marginBottom:8}},'SAVE'),
+        h('button',{onClick:()=>setRepsFor(null),className:'btn',style:{width:'100%',padding:'12px',background:'transparent',borderRadius:12,color:C.silverDim,fontSize:13,fontWeight:700}},'Cancel')
+      )
+    ),
     h('div',{style:{padding:'54px 24px 20px',background:'linear-gradient(180deg,#141B26,#0D1117)'}},
       h('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'flex-start'}},
         h('div',null,
@@ -1034,12 +1183,27 @@ function DashScreen({setScreen,user,profile,setProfile,nonnegTiers,tierNotice,se
       h('div',{style:{display:'flex',flexDirection:'column',gap:8,marginBottom:20}},
         NONNEG.map(item=>{
           const d=!!checked[item.id];
-          return h('button',{key:item.id,onClick:()=>toggle(item.id),className:'btn',style:{background:d?'#22C55E12':C.navyLight,border:'1.5px solid '+(d?'#22C55E60':C.border),borderRadius:12,padding:'12px 16px',display:'flex',alignItems:'center',gap:12,textAlign:'left',width:'100%'}},
-            h('div',{style:{width:28,height:28,borderRadius:'50%',flexShrink:0,background:d?C.success:C.border,display:'flex',alignItems:'center',justifyContent:'center',fontSize:13,color:'#fff',fontWeight:800}},d?'✓':''),
-            h('div',{style:{flex:1}},h('span',{style:{fontSize:14,fontWeight:700,color:d?C.silverDim:C.silverBright,textDecoration:d?'line-through':'none'}},item.label)),
-            h('div',{style:{fontSize:13,fontWeight:800,color:d?C.success:C.silver}},item.target,' ',h('span',{style:{fontSize:10,color:C.silverDim}},item.unit||'reps'))
+          const r=reps[item.id];
+          const partial=!d&&r!=null&&r>0&&r<item.target;
+          return h('div',{key:item.id,style:{background:d?'#22C55E12':partial?'#F59E0B10':C.navyLight,border:'1.5px solid '+(d?'#22C55E60':partial?'#F59E0B60':C.border),borderRadius:12,padding:'12px 16px',display:'flex',alignItems:'center',gap:12,width:'100%'}},
+            h('button',{onClick:()=>toggle(item.id),className:'btn',style:{width:34,height:34,borderRadius:'50%',flexShrink:0,background:d?C.success:C.border,display:'flex',alignItems:'center',justifyContent:'center',fontSize:15,color:'#fff',fontWeight:800,padding:0}},d?'✓':''),
+            h('button',{onClick:()=>{setRepsFor(item);setRepsVal(r!=null&&!d?String(r):'');},className:'btn',style:{flex:1,background:'none',textAlign:'left',padding:0,display:'flex',alignItems:'center',gap:8}},
+              h('div',{style:{flex:1}},
+                h('div',{style:{fontSize:14,fontWeight:700,color:d?C.silverDim:C.silverBright,textDecoration:d?'line-through':'none'}},item.label),
+                partial&&h('div',{style:{fontSize:11,color:C.warning,fontWeight:700,marginTop:2}},r+' done - '+(Math.round((item.target-r)*100)/100)+' owed')
+              ),
+              h('div',{style:{fontSize:13,fontWeight:800,color:d?C.success:C.silver}},item.target,' ',h('span',{style:{fontSize:10,color:C.silverDim}},item.unit||'reps'))
+            )
           );
         })
+      ),
+      h('button',{onClick:()=>setScreen(S.MAKEUP),className:'btn',style:{width:'100%',background:makeupOwed>0?'#F59E0B12':C.navyLight,border:'1.5px solid '+(makeupOwed>0?'#F59E0B50':C.border),borderRadius:12,padding:'12px 16px',display:'flex',alignItems:'center',gap:12,textAlign:'left',marginBottom:20}},
+        h('div',{style:{fontSize:22}},'🧾'),
+        h('div',{style:{flex:1}},
+          h('div',{style:{fontSize:13,fontWeight:800,color:makeupOwed>0?C.warning:C.silverBright}},'MAKEUP WORK'),
+          h('div',{style:{fontSize:11,color:C.silverDim}},makeupOwed===null?'See what you owe':makeupOwed>0?'You owe reps from missed days - tap to pay them back':'Nothing owed. Clean slate.')
+        ),
+        h('div',{style:{fontSize:16,color:C.silverDim}},'›')
       ),
       all&&h('div',{style:{background:'#22C55E15',border:'1px solid #22C55E40',borderRadius:14,padding:'14px 16px',marginBottom:20,display:'flex',gap:12,alignItems:'center'}},
         h('div',{style:{fontSize:28}},'💪'),
@@ -2615,7 +2779,18 @@ function App(){
   const [tierNotice,setTierNotice]=useState(null);
 
   const loadProfile=async(id)=>{
-    const{data}=await sb.from('profiles').select('*').eq('id',id).maybeSingle();
+    let{data}=await sb.from('profiles').select('*').eq('id',id).maybeSingle();
+    if(data&&Array.isArray(data.nonneg_items)&&!data.nonneg_items.some(it=>it.id==='dips')){
+      const tested=parseInt(data.fitness_test?.dips)||0;
+      const tierDefault=(NONNEG_TIERS[data.tier||1]||NONNEG_TIERS[1]).find(it=>it.id==='dips')?.target||10;
+      const target=tested>0?Math.max(5,Math.round(tested*0.6)):tierDefault;
+      const dipsItem={id:'dips',label:'Dips',target,unit:null,increment:NONNEG_INCREMENTS.dips};
+      const items=[...data.nonneg_items];
+      const at=items.findIndex(it=>it.id==='pushups');
+      items.splice(at>=0?at+1:items.length,0,dipsItem);
+      await sb.from('profiles').update({nonneg_items:items}).eq('id',id);
+      data={...data,nonneg_items:items};
+    }
     if(data)setProfile(data);
     return data;
   };
@@ -2705,6 +2880,7 @@ function App(){
       case S.PROGRESS:return h(ProgressScreen,{setScreen,user,profile,setProfile});
       case S.LEADERBOARD:return h(LeaderboardScreen,{setScreen,profile});
       case S.GRADES:return h(GradesScreen,{setScreen,user,profile});
+      case S.MAKEUP:return h(MakeupScreen,{setScreen,user,profile});
       case S.PROFILE:return h(ProfileScreen,{setScreen,user,profile,setProfile});
       case S.TRAINER:return h(TrainerDashboard,{setScreen,user,profile,workouts,loadWorkouts,loadNonnegTiers,loadCoachPrompt});
       default:return null;
